@@ -53,6 +53,8 @@ button, input { font: inherit; color: inherit; }
 button { cursor: pointer; -webkit-user-select: none; user-select: none; touch-action: manipulation; }
 button:disabled { cursor: default; }
 :focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+/* 화면이 바뀔 때 낭독기를 위해 제목으로 옮기는 포커스는 테두리를 그리지 않는다. */
+[tabindex="-1"]:focus { outline: none; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 #app {
