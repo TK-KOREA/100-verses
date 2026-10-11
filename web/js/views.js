@@ -7,7 +7,7 @@ import * as L from './listen.js';
 
 const STEP_NAMES = ['읽기', '첫 글자', '빈칸', '혼자'];
 const HINTS = [
-  '소리 내어 읽을 때마다 눌러요',
+  '소리 내어 세 번 읽어 봐요',
   '첫 글자를 보고 말해 봐요',
   '가려진 곳을 누르면 보여요',
   '안 보고 말해 봐요. 막히면 눌러서 살짝 봐요',
@@ -70,24 +70,22 @@ const isInstalled = () =>
  * 브라우저로 열었을 때만 오늘 화면 맨 위에 한 줄. iPhone은 Safari와 홈 화면 앱이 저장소를 따로 쓰므로
  * 처음부터 홈 화면에서 쓰게 하려는 것이다. 닫으면 다시 띄우지 않고, 설치하면 저절로 사라진다.
  */
-function installHint() {
-  if (isInstalled() || P.load('install_hint_closed', false)) return null;
-  const card = h('div', { class: 'install-hint', role: 'note' });
-  card.append(
-    h('p', null, '홈 화면에 추가하면 앱처럼 쓸 수 있어요'),
-    h('div', { class: 'install-actions' },
-      h('a', { class: 'text-btn', href: '#/settings?home' }, '방법 보기'),
-      h('button', {
-        type: 'button',
-        class: 'text-btn ghost',
-        onclick: () => {
-          P.save('install_hint_closed', true);
-          card.remove();
-        },
-      }, '닫기'),
-    ),
-  );
-  return card;
+function installHint({ closable = true } = {}) {
+  if (isInstalled() || (closable && P.load('install_hint_closed', false))) return null;
+  const line = h('div', { class: 'install-hint', role: 'note' },
+    h('a', { class: 'install-link', href: '#/settings?home' }, '홈 화면에 추가하는 방법 ›'));
+  if (closable) {
+    line.append(h('button', {
+      type: 'button',
+      class: 'install-close',
+      'aria-label': '닫기',
+      onclick: () => {
+        P.save('install_hint_closed', true);
+        line.remove();
+      },
+    }, icon('x')));
+  }
+  return line;
 }
 
 // ---------- 오늘 ----------
@@ -192,7 +190,6 @@ export function verse(app, id) {
   };
   const opened = new Set();
   let reads = 0; // 1단계: 소리 내어 읽은 횟수(아이가 눌러 센다)
-  let nextBtn = null;
   let stopListen = null; // 4단계 말해 보기
   let listenMsg = '';
 
@@ -231,22 +228,25 @@ export function verse(app, id) {
     render();
   }
 
-  // ---- 1단계: 세 번 읽기 세기. 셋이 다 차면 "다음 단계"가 주황으로 바뀐다(건너뛰는 것을 막지는 않는다).
-  function paintNext() {
-    if (nextBtn && stage === 1) nextBtn.className = reads >= 3 ? 'btn primary' : 'btn secondary';
-  }
-  function readDots() {
-    return h('div', { class: 'read-dots', role: 'group', 'aria-label': '읽은 횟수' }, [1, 2, 3].map((i) => h('button', {
+  // ---- 1단계: 아래 주황 버튼 하나로 센다. "읽었어요 1/3" → … → 세 번째에 "다음 단계"로 바뀐다.
+  // 건너뛰고 싶은 아이는 위쪽 단계 표시로 넘어갈 수 있다.
+  function readButton() {
+    const doneReading = reads >= 3;
+    return h('button', {
       type: 'button',
-      class: 'read-dot',
-      'aria-pressed': String(i <= reads),
-      'aria-label': `${i}번 읽었어요`,
-      onclick: () => {
-        reads = i <= reads ? i - 1 : i; // 마지막 칸을 다시 누르면 하나 뺀다
-        tools.replaceChildren(readDots());
-        paintNext();
-      },
-    }, i <= reads ? '✓' : String(i))));
+      class: 'btn primary',
+      'aria-label': doneReading ? '다음 단계' : `읽었어요, ${reads}번 읽음. 세 번 읽으면 다음 단계`,
+      onclick: guard(() => {
+        if (reads >= 3) {
+          setStage(2);
+          return;
+        }
+        reads++;
+        // 세 번째에 버튼이 "다음 단계"로 바뀌므로, 같은 자리를 연달아 누른 것이 바로 넘어가지 않게 잠깐 막는다.
+        if (reads >= 3) lockUntil = performance.now() + 400;
+        actions.replaceChildren(readButton());
+      }),
+    }, doneReading ? '다음 단계' : `읽었어요 ${reads}/3`);
   }
 
   // ---- 4단계: 말해 보기. 맞게 말한 어절의 빈칸을 앞에서부터 연다.
@@ -276,7 +276,7 @@ export function verse(app, id) {
         'aria-pressed': String(on),
         onclick: () => (stopListen ? (endListen(), paintListen()) : startListen()),
       }, icon('mic'), on ? '그만 듣기' : '말해 보기'),
-      listenMsg ? h('p', { class: 'listen-msg', role: 'status' }, listenMsg) : null,
+      ...(listenMsg ? [h('p', { class: 'listen-msg', role: 'status' }, listenMsg)] : []), // replaceChildren은 null을 "null" 글자로 넣는다
     );
   }
   function startListen() {
@@ -370,7 +370,6 @@ export function verse(app, id) {
     }));
     hint.textContent = HINTS[stage - 1];
     tools.replaceChildren();
-    if (stage === 1) tools.append(readDots());
     renderText();
     paintListen();
 
@@ -393,11 +392,10 @@ export function verse(app, id) {
 
     actions.replaceChildren();
     lockUntil = performance.now() + 400;
-    nextBtn = null;
-    if (stage < 4) {
-      nextBtn = h('button', { type: 'button', class: 'btn primary', onclick: guard(() => setStage(stage + 1)) }, '다음 단계');
-      actions.append(nextBtn);
-      paintNext();
+    if (stage === 1) {
+      actions.append(readButton());
+    } else if (stage < 4) {
+      actions.append(h('button', { type: 'button', class: 'btn primary', onclick: guard(() => setStage(stage + 1)) }, '다음 단계'));
     } else if (!done) {
       actions.append(
         h('button', { type: 'button', class: 'btn primary', onclick: guard(climb) }, '외웠어요!'),
@@ -916,6 +914,7 @@ export function welcome(app) {
     h('div', { class: 'welcome-mark' }, icon('stairs')),
     h('h1', { class: 'title', tabindex: '-1' }, '말씀 100계단'),
     h('p', { class: 'sub', style: 'margin-top:8px;font-size:20px;line-height:1.6' }, '하루에 한 구절씩 외우며', h('br'), '꼭대기까지 올라가요.'),
+    installHint({ closable: false }),
     h('label', { class: 'field', style: 'margin-top:40px' },
       h('span', { class: 'field-label' }, '뭐라고 불러 줄까요?'),
       input,

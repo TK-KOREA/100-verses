@@ -156,15 +156,9 @@ button:disabled { cursor: default; }
 .steps button.done { color: var(--accent-ink); }
 .steps button[aria-current="step"] { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
 .hint { font-size: calc(20px * var(--fs)); font-weight: 700; margin-top: 20px; }
-/* 1단계 읽은 횟수, 4단계 말해 보기 */
+/* 4단계 말해 보기 */
 .practice-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 10px; }
 .practice-tools:empty { display: none; }
-.read-dots { display: flex; gap: 10px; }
-.read-dot {
-  width: 52px; height: 52px; border-radius: 26px; border: 2px dashed var(--line-strong); background: var(--surface);
-  font-size: 20px; font-weight: 800; color: var(--text-2);
-}
-.read-dot[aria-pressed="true"] { background: var(--accent); border: 2px solid var(--accent); color: var(--accent-on); animation: pop .3s cubic-bezier(.2, .9, .3, 1.4) both; }
 .listen-btn { min-height: 52px; padding: 0 20px; font-size: 18px; }
 .listen-btn[aria-pressed="true"] { background: var(--accent); color: var(--accent-on); }
 .listen-msg { font-size: calc(17px * var(--fs)); font-weight: 700; color: var(--accent-ink); }
@@ -267,15 +261,21 @@ button:disabled { cursor: default; }
   font-variant-numeric: tabular-nums;
 }
 
-/* 홈 화면 추가 안내(브라우저로 열었을 때만) */
+/* 홈 화면 추가 안내(브라우저로 열었을 때만): 한 줄 */
 .install-hint {
-  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 8px;
-  margin-bottom: 16px; padding: 8px 8px 8px 16px; border-radius: 16px;
+  display: flex; align-items: center; min-height: 52px; margin-bottom: 12px; padding: 0 2px 0 16px; border-radius: 14px;
   background: var(--surface); border: 1px solid var(--line);
 }
-.install-hint p { font-size: 16px; font-weight: 700; }
-.install-actions { display: flex; gap: 4px; margin-left: auto; }
-.text-btn.ghost { background: transparent; color: var(--text-2); }
+.install-link {
+  flex: 1; min-height: 48px; display: flex; align-items: center;
+  font-size: 16px; font-weight: 700; color: var(--accent-ink); text-decoration: none;
+}
+.install-close {
+  width: 44px; height: 44px; border: 0; border-radius: 22px; background: transparent; color: var(--text-2);
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+}
+.install-close svg { width: 20px; height: 20px; }
+.welcome .install-hint { margin: 16px 0 0; }
 .text-btn {
   min-height: 48px; padding: 0 16px; border-radius: 24px; border: 0; background: var(--surface-2);
   display: inline-flex; align-items: center; gap: 6px; font-size: 17px; font-weight: 700; text-decoration: none; color: var(--text);
