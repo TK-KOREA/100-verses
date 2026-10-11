@@ -27,6 +27,25 @@ function setFontLevel(v) {
   applyFontLevel();
 }
 
+/** 글자 크기 3단계 고르기. 구절·장절·안내 글자만 키우고 버튼은 그대로 둔다. 설정과 처음 화면에서 쓴다. */
+function fontPicker() {
+  const seg = h('div', { class: 'seg', role: 'radiogroup', 'aria-label': '글자 크기', style: 'margin-top:0' });
+  const paint = () => {
+    const cur = fontLevel();
+    seg.replaceChildren(...FONT_LEVELS.map(([val, label]) => h('button', {
+      type: 'button',
+      role: 'radio',
+      'aria-checked': String(cur === val),
+      onclick: () => {
+        setFontLevel(val);
+        paint();
+      },
+    }, label)));
+  };
+  paint();
+  return seg;
+}
+
 const topicLabel = (v) => (v.subtopic ? `${v.topic} · ${v.subtopic}` : v.topic);
 
 /** 숫자로 끝나는 장절 뒤 조사: 7(칠)을, 5(오)를. 0으로 끝나면 십·백이라 '을'. */
@@ -56,6 +75,18 @@ function speakButton(v, iconOnly = false) {
 }
 
 /** 오늘(KST) 외운 구절. 외운 순서대로. */
+/** 오늘보다 앞선 날 가운데 가장 최근에 외운 날의 구절들. {label, list} 또는 null */
+function lastDayDone() {
+  const t = P.kstToday();
+  const before = P.doneList().filter((m) => m.at.slice(0, 10) < t);
+  if (!before.length) return null;
+  const day = before.reduce((a, m) => (m.at.slice(0, 10) > a ? m.at.slice(0, 10) : a), '');
+  return {
+    label: day === P.addDays(t, -1) ? '어제 외운 말씀' : '지난번 외운 말씀',
+    list: before.filter((m) => m.at.slice(0, 10) === day),
+  };
+}
+
 function doneToday() {
   const t = P.kstToday();
   return P.doneList().filter((m) => m.at.slice(0, 10) === t);
@@ -88,6 +119,25 @@ function installHint({ closable = true } = {}) {
   return line;
 }
 
+/** 다 했어요 화면: 지난번 외운 말씀을 다시 들어 보기(기획서 2차 "복습"의 가장 작은 형태). */
+function lastBlock(app) {
+  const last = lastDayDone();
+  if (!last) return null;
+  return h('section', null,
+    h('h2', { class: 'group-head' }, h('span', null, last.label)),
+    h('div', { class: 'group' }, last.list.map((m) => {
+      const lv = app.byId[m.id];
+      return h('div', { class: 'row-wrap' },
+        h('button', { type: 'button', class: 'row', onclick: () => app.go('#/verse/' + lv.id) },
+          h('span', { class: 'num done', 'aria-hidden': 'true' }, '✓'),
+          h('span', { class: 'row-t' }, h('b', null, lv.refLong), h('p', null, lv.text.split('\n')[0])),
+        ),
+        speakButton(lv, true),
+      );
+    })),
+  );
+}
+
 // ---------- 오늘 ----------
 
 export function today(app) {
@@ -116,7 +166,7 @@ export function today(app) {
 
   const chipsNow = () => {
     const c = [];
-    if (count > 0) c.push(h('span', { class: 'chip accent' }, `${count}계단 올랐어요`));
+    if (count > 0) c.push(h('span', { class: 'chip accent' }, `지금 ${count}계단`));
     if (streak >= 2) c.push(h('span', { class: 'chip' }, `🔥 ${streak}일 연속`));
     return c;
   };
@@ -142,6 +192,7 @@ export function today(app) {
           h('span', { class: 'chev', 'aria-hidden': 'true' }, '›'),
         );
       })),
+      lastBlock(app),
       h('div', { class: 'actions' },
         h('button', { type: 'button', class: 'btn secondary small', onclick: () => app.go('#/verse/' + nextId) }, '한 계단 더 오르기'),
       ),
@@ -659,7 +710,7 @@ export function stairs(app) {
       h('h1', { class: 'title', tabindex: '-1' }, '내 계단', h('span', { class: 'head-count' }, `${n} / ${STEP_COUNT}`)),
       h('a', { class: 'text-btn', href: '#/settings' }, icon('gear'), '설정'),
     ),
-    h('div', { class: 'card', style: 'margin-top:4px;padding:20px' },
+    h('div', { class: 'card stairs-card', style: 'margin-top:4px;padding:20px' },
       h('div', { class: 'summary' },
         h('p', { class: 'count' }, String(n), h('small', null, ` / ${STEP_COUNT}계단`)),
         streak >= 2 ? h('span', { class: 'chip' }, `🔥 ${streak}일 연속`) : h('span'),
@@ -671,9 +722,18 @@ export function stairs(app) {
     wrap,
   );
 
+  // 머리줄 숫자는 아래 카드(같은 숫자를 크게 보여 줌)가 화면 밖으로 나갔을 때만 보인다.
+  const headRow = root.querySelector('.stairs-head');
+  const io = 'IntersectionObserver' in window
+    ? new IntersectionObserver(([e]) => headRow.classList.toggle('show-count', !e.isIntersecting), { rootMargin: '-72px 0px 0px 0px' })
+    : null;
+  if (io) io.observe(root.querySelector('.stairs-card'));
+  else headRow.classList.add('show-count');
+
   return {
     el: root,
     title: '내 계단',
+    cleanup: () => io && io.disconnect(),
     after: (restored) => {
       if (restored) return;
       const target = wrap.querySelector('.now') || wrap.querySelector('.summit-step.done') || wrap.querySelector('.ground');
@@ -798,20 +858,7 @@ export function settings(app, _id, query) {
     if (e.key === 'Enter') saveName();
   });
 
-  // 글자 크기 3단계. 구절·장절·안내 글자만 키우고 버튼은 그대로 둔다.
-  const fontSeg = h('div', { class: 'seg', role: 'radiogroup', 'aria-label': '글자 크기', style: 'margin-top:0' });
-  function paintFont() {
-    const cur = fontLevel();
-    fontSeg.replaceChildren(...FONT_LEVELS.map(([val, label]) => h('button', {
-      type: 'button',
-      role: 'radio',
-      'aria-checked': String(cur === val),
-      onclick: () => {
-        setFontLevel(val);
-        paintFont();
-      },
-    }, label)));
-  }
+  const fontSeg = fontPicker();
 
   const speedSeg = S.canSpeak ? h('div', { class: 'seg', role: 'radiogroup', 'aria-label': '읽어 주는 빠르기', style: 'margin-top:0' }) : null;
   function paintSpeed() {
@@ -878,7 +925,6 @@ export function settings(app, _id, query) {
   paintCode();
   paintStatus();
   paintSpeed();
-  paintFont();
   return {
     el: root,
     title: '설정',
@@ -920,6 +966,8 @@ export function welcome(app) {
       input,
     ),
     h('p', { class: 'help' }, '안 써도 돼요. 진짜 이름 대신 별명도 좋아요.'),
+    h('p', { class: 'field-label', style: 'margin-top:24px' }, '글자 크기'),
+    fontPicker(),
     h('div', { class: 'grow' }),
     h('button', { type: 'button', class: 'btn primary', onclick: start }, '시작하기'),
     h('button', {

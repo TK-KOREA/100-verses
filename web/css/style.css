@@ -160,7 +160,8 @@ button:disabled { cursor: default; }
 .practice-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 10px; }
 .practice-tools:empty { display: none; }
 .listen-btn { min-height: 52px; padding: 0 20px; font-size: 18px; }
-.listen-btn[aria-pressed="true"] { background: var(--accent); color: var(--accent-on); }
+/* 듣는 중: 옅은 주황. 진한 주황 버튼은 "외웠어요!" 하나만 둔다. */
+.listen-btn[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-ink); box-shadow: inset 0 0 0 2px var(--accent); }
 .listen-msg { font-size: calc(17px * var(--fs)); font-weight: 700; color: var(--accent-ink); }
 .practice-verse { font-size: calc(27px * var(--fs)); line-height: 1.9; font-weight: 600; margin-top: 12px; }
 .practice-verse .line { display: block; }
@@ -228,7 +229,9 @@ button:disabled { cursor: default; }
   width: 100%; border: 0; background: none; text-align: left;
   display: grid; grid-template-columns: 44px 1fr 16px; gap: 12px; align-items: center; min-height: 76px; padding: 10px 16px;
 }
-.row + .row { border-top: 1px solid var(--line); }
+.row + .row, .row-wrap + .row-wrap { border-top: 1px solid var(--line); }
+.row-wrap { display: grid; grid-template-columns: 1fr auto; align-items: center; padding-right: 12px; }
+.row-wrap .row { grid-template-columns: 44px 1fr; }
 .row:active { background: var(--surface-2); }
 .num {
   width: 44px; height: 44px; border-radius: 22px; background: var(--step-todo); display: flex; align-items: center; justify-content: center;
@@ -255,7 +258,8 @@ button:disabled { cursor: default; }
   position: sticky; top: 0; z-index: 5; background: var(--bg);
   margin: calc(-1 * var(--safe-t) - 20px) -16px 0; padding: calc(var(--safe-t) + 16px) 16px 8px;
 }
-.head-count {
+.head-count { display: none; }
+.stairs-head.show-count .head-count {
   display: inline-block; margin-left: 10px; padding: 2px 10px; border-radius: 14px; vertical-align: 5px;
   background: var(--accent-soft); color: var(--accent-ink); font-size: 16px; font-weight: 800; letter-spacing: 0;
   font-variant-numeric: tabular-nums;
