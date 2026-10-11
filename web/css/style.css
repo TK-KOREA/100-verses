@@ -14,6 +14,7 @@
   --step-todo: #ECE4D8;
   --shadow: 0 1px 3px rgba(0, 0, 0, .12);
   --font: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
+  --fs: 1; /* 글자 크기 단계(설정): 1 · 1.15 · 1.3 */
   --tabbar-h: 76px;
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-t: env(safe-area-inset-top, 0px);
@@ -36,6 +37,9 @@
     --shadow: 0 1px 3px rgba(0, 0, 0, .5);
   }
 }
+
+html[data-font="2"] { --fs: 1.15; }
+html[data-font="3"] { --fs: 1.3; }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html { -webkit-text-size-adjust: 100%; }
@@ -83,18 +87,18 @@ button:disabled { cursor: default; }
 
 /* ── 공통 ───────────────── */
 .title { font-size: 30px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.25; }
-.sub { font-size: 18px; color: var(--text-2); }
+.sub { font-size: calc(18px * var(--fs)); color: var(--text-2); }
 .chips { display: flex; gap: 8px; flex-wrap: wrap; }
 .chip {
   display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 14px; border-radius: 18px;
   background: var(--surface); border: 1px solid var(--line); font-size: 16px; font-weight: 700;
 }
 .chip.accent { background: var(--accent-soft); border-color: transparent; color: var(--accent-ink); }
-.eyebrow { font-size: 16px; font-weight: 700; color: var(--accent-ink); }
+.eyebrow { font-size: calc(16px * var(--fs)); font-weight: 700; color: var(--accent-ink); }
 .card { background: var(--surface); border-radius: 24px; padding: 24px 20px; border: 1px solid var(--line); }
-.ref { font-size: 26px; font-weight: 800; letter-spacing: -0.01em; margin-top: 4px; line-height: 1.3; }
-.verse { font-size: 24px; line-height: 1.7; margin-top: 16px; font-weight: 500; white-space: pre-line; }
-.excerpt { margin-top: 12px; font-size: 16px; color: var(--text-2); font-weight: 600; }
+.ref { font-size: calc(26px * var(--fs)); font-weight: 800; letter-spacing: -0.01em; margin-top: 4px; line-height: 1.3; }
+.verse { font-size: calc(24px * var(--fs)); line-height: 1.7; margin-top: 16px; font-weight: 500; white-space: pre-line; }
+.excerpt { margin-top: 12px; font-size: calc(16px * var(--fs)); color: var(--text-2); font-weight: 600; }
 .btn {
   width: 100%; min-height: 64px; border-radius: 18px; border: 0; padding: 0 16px;
   font-size: 21px; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 10px;
@@ -151,18 +155,18 @@ button:disabled { cursor: default; }
 .steps button span { font-size: 14px; font-weight: 800; }
 .steps button.done { color: var(--accent-ink); }
 .steps button[aria-current="step"] { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
-.hint { font-size: 20px; font-weight: 700; margin-top: 20px; }
-.practice-verse { font-size: 27px; line-height: 1.9; font-weight: 600; margin-top: 12px; }
+.hint { font-size: calc(20px * var(--fs)); font-weight: 700; margin-top: 20px; }
+.practice-verse { font-size: calc(27px * var(--fs)); line-height: 1.9; font-weight: 600; margin-top: 12px; }
 .practice-verse .line { display: block; }
 .w { white-space: nowrap; }
 .w .rest { color: transparent; border-bottom: 3px solid var(--line-strong); }
 .blank {
   display: inline-block; min-height: 44px; vertical-align: middle; padding: 0 2px; border-radius: 10px;
-  background: var(--surface-2); color: transparent; border: 2px dashed var(--line-strong); line-height: 40px;
+  background: var(--surface-2); color: transparent; border: 2px dashed var(--line-strong); line-height: 1.45;
   font: inherit; margin: 2px 0;
 }
 .blank[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-ink); border: 2px solid transparent; }
-.done-note { margin-top: 24px; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; font-size: 18px; font-weight: 700; color: var(--accent-ink); }
+.done-note { margin-top: 24px; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; font-size: calc(18px * var(--fs)); font-weight: 700; color: var(--accent-ink); }
 .done-note .link { padding: 0 8px; font-size: 17px; }
 .practice-actions {
   position: sticky; bottom: 0; margin: 24px -16px 0; padding: 16px 16px calc(var(--safe-b) + 8px);
@@ -227,8 +231,8 @@ button:disabled { cursor: default; }
 .num.done { background: var(--accent); color: var(--accent-on); }
 .num.next { background: var(--accent-soft); color: var(--accent-ink); box-shadow: inset 0 0 0 2px var(--accent); }
 .row-t { min-width: 0; }
-.row-t b { font-size: 20px; font-weight: 800; display: block; }
-.row-t p { font-size: 17px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+.row-t b { font-size: calc(20px * var(--fs)); font-weight: 800; display: block; }
+.row-t p { font-size: calc(17px * var(--fs)); color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
 .tag {
   display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 8px; background: var(--surface-2); color: var(--text-2);
   font-size: 14px; font-weight: 700; vertical-align: 3px;

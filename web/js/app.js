@@ -4,6 +4,8 @@ import * as P from './progress.js';
 import * as S from './speech.js';
 import * as V from './views.js';
 
+V.applyFontLevel(); // 첫 화면을 그리기 전에 글자 크기를 맞춘다.
+
 const main = document.getElementById('app');
 const tabbar = document.getElementById('tabbar');
 

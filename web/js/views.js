@@ -13,6 +13,19 @@ const HINTS = [
 ];
 const STEP_COUNT = 100;
 
+const FONT_LEVELS = [[1, '보통'], [2, '크게'], [3, '아주 크게']];
+export const fontLevel = () => {
+  const v = Number(P.load('font', 1));
+  return v === 2 || v === 3 ? v : 1;
+};
+export function applyFontLevel() {
+  document.documentElement.dataset.font = String(fontLevel());
+}
+function setFontLevel(v) {
+  P.save('font', v);
+  applyFontLevel();
+}
+
 const topicLabel = (v) => (v.subtopic ? `${v.topic} · ${v.subtopic}` : v.topic);
 
 /** 숫자로 끝나는 장절 뒤 조사: 7(칠)을, 5(오)를. 0으로 끝나면 십·백이라 '을'. */
@@ -41,50 +54,10 @@ function speakButton(v, iconOnly = false) {
   return btn;
 }
 
-// ---------- 가족에게 자랑하기 ----------
-
-const APP_URL = () => new URL('./', location.href).href;
-
 /** 오늘(KST) 외운 구절. 외운 순서대로. */
 function doneToday() {
   const t = P.kstToday();
   return P.doneList().filter((m) => m.at.slice(0, 10) === t);
-}
-
-/** 아이가 직접 보내는 말투로 쓴다. 이름 뒤 조사를 고르지 않아도 되게 1인칭으로. */
-function shareText(app) {
-  const n = P.doneCount();
-  if (n >= STEP_COUNT) {
-    return `말씀 100계단 꼭대기에 올라왔어요! 👑\n100구절을 모두 외웠어요.\n\n${APP_URL()}`;
-  }
-  const list = doneToday();
-  const head = list.length >= 2 ? `오늘 말씀 ${list.length}계단 올랐어요! 🙌` : '오늘 말씀 한 계단 올랐어요! 🙌';
-  const verses = list.map((m) => {
-    const v = app.byId[m.id];
-    return `${v.refLong}\n${v.text}`;
-  }).join('\n\n');
-  return `${head}\n지금 ${n}번째 계단이에요.\n\n${verses}\n\n말씀 100계단\n${APP_URL()}`;
-}
-
-async function share(text) {
-  if (navigator.share) {
-    try {
-      await navigator.share({ text });
-      return;
-    } catch (e) {
-      if (e && e.name === 'AbortError') return; // 아이가 공유 창을 닫음
-    }
-  }
-  try {
-    await navigator.clipboard.writeText(text);
-    toast('자랑할 글을 복사했어요. 카톡에 붙여 넣어 보세요');
-  } catch (e) {
-    toast('지금은 보낼 수 없어요');
-  }
-}
-
-function shareButton(app, cls = 'btn primary') {
-  return h('button', { type: 'button', class: cls, onclick: () => share(shareText(app)) }, '가족에게 자랑하기');
 }
 
 // ---------- 오늘 ----------
@@ -106,8 +79,8 @@ export function today(app) {
         h('p', { class: 'sub', style: 'margin-top:12px;font-size:20px' }, '100구절을 모두 마음에 담았어요.'),
       ),
       h('div', { class: 'actions stack' },
-        shareButton(app),
-        h('button', { type: 'button', class: 'btn secondary small', onclick: () => app.go('#/stairs') }, '내 계단 보기'),
+        h('button', { type: 'button', class: 'btn primary', onclick: () => app.go('#/stairs') }, '내 계단 보기'),
+        h('button', { type: 'button', class: 'btn secondary small', onclick: () => app.go('#/list') }, '모든 구절 다시 보기'),
       ),
     );
     return { el: root, title: '오늘' };
@@ -141,8 +114,7 @@ export function today(app) {
         );
       })),
       h('div', { class: 'actions' },
-        shareButton(app),
-        h('button', { type: 'button', class: 'link', style: 'display:block;margin:4px auto 0', onclick: () => app.go('#/verse/' + nextId) }, '한 계단 더 오르기'),
+        h('button', { type: 'button', class: 'btn secondary small', onclick: () => app.go('#/verse/' + nextId) }, '한 계단 더 오르기'),
       ),
     );
     return { el: root, title: '오늘' };
@@ -343,8 +315,8 @@ function celebrate(app, v) {
       h('p', { class: 'sub', style: 'font-size:20px;margin-top:16px;line-height:1.6' }, '100구절을 모두 마음에 담았어요.', h('br'), '정말 잘했어요.'),
       h('div', { class: 'grow' }),
       h('div', { class: 'stack' },
-        shareButton(app),
-        h('button', { type: 'button', class: 'btn secondary small', onclick: () => app.go('#/stairs') }, '내 계단 보기'),
+        h('button', { type: 'button', class: 'btn primary', onclick: () => app.go('#/stairs') }, '내 계단 보기'),
+        h('button', { type: 'button', class: 'btn secondary small', onclick: () => app.go('#/') }, '처음 화면으로'),
       ),
       h('button', { type: 'button', class: 'link', style: 'margin-top:8px', onclick: undo }, '잘못 눌렀어요'),
     );
@@ -665,6 +637,21 @@ export function settings(app, _id, query) {
     if (e.key === 'Enter') saveName();
   });
 
+  // 글자 크기 3단계. 구절·장절·안내 글자만 키우고 버튼은 그대로 둔다.
+  const fontSeg = h('div', { class: 'seg', role: 'radiogroup', 'aria-label': '글자 크기', style: 'margin-top:0' });
+  function paintFont() {
+    const cur = fontLevel();
+    fontSeg.replaceChildren(...FONT_LEVELS.map(([val, label]) => h('button', {
+      type: 'button',
+      role: 'radio',
+      'aria-checked': String(cur === val),
+      onclick: () => {
+        setFontLevel(val);
+        paintFont();
+      },
+    }, label)));
+  }
+
   const speedSeg = S.canSpeak ? h('div', { class: 'seg', role: 'radiogroup', 'aria-label': '읽어 주는 빠르기', style: 'margin-top:0' }) : null;
   function paintSpeed() {
     if (!speedSeg) return;
@@ -705,6 +692,14 @@ export function settings(app, _id, query) {
         restoreMsg,
       ),
     ),
+    h('section', { class: 'section' },
+      h('h2', null, '글자 크기'),
+      fontSeg,
+      h('div', { class: 'card', style: 'margin-top:12px;padding:16px 20px' },
+        h('p', { class: 'ref', style: 'margin-top:0' }, '베드로전서 5:7'),
+        h('p', { class: 'verse', style: 'margin-top:8px' }, '여러분의 모든 염려를 하나님께 맡기십시오.'),
+      ),
+    ),
     speedSeg ? h('section', { class: 'section' }, h('h2', null, '읽어 주는 빠르기'), speedSeg) : null,
     h('section', { class: 'section' }, h('h2', null, '저장 상태'), h('div', { class: 'card' }, statusBox)),
     h('section', { class: 'section' },
@@ -722,6 +717,7 @@ export function settings(app, _id, query) {
   paintCode();
   paintStatus();
   paintSpeed();
+  paintFont();
   return {
     el: root,
     title: '설정',
