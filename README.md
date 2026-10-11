@@ -2,6 +2,7 @@
 
 어린이가 필수 암송 구절 100개를 하루 한 구절씩 외우고, 외운 구절을 스스로 체크하는 웹앱(PWA). 구절 하나를 외울 때마다 계단 하나를 오른다.
 
+- 공개 주소: https://tk-korea.github.io/verse-100-steps/
 - 기준 문서: [말씀 100계단 개발 기획서](https://claude.ai/code/artifact/3de0cd38-30d3-4664-be2b-8792d11e7957)
 - 시안: [design/mockup.html](design/mockup.html)
 
