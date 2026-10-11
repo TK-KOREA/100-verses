@@ -1,6 +1,6 @@
 // 오프라인 저장. 처음 열 때 모든 파일과 구절 데이터를 저장하고, 다음부터는 저장한 것을 먼저 보여 준 뒤
 // 뒤에서 새 파일을 받아 둔다(다음에 열 때 반영). 파일을 바꾸면 VERSION을 올린다.
-const VERSION = 'v100-2026-10-11-5';
+const VERSION = 'v100-2026-10-11-6';
 const FILES = [
   './',
   'index.html',
@@ -20,7 +20,13 @@ const FILES = [
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(VERSION).then((c) => c.addAll(FILES)).then(() => self.skipWaiting()));
+  // cache: 'reload' — 브라우저 캐시(GitHub Pages는 10분)를 거치지 않고 새로 받는다.
+  // 안 그러면 배포 직후에 연 기기가 옛 파일을 새 버전 이름으로 저장해 버린다.
+  e.waitUntil(
+    caches.open(VERSION)
+      .then((c) => c.addAll(FILES.map((f) => new Request(f, { cache: 'reload' }))))
+      .then(() => self.skipWaiting()),
+  );
 });
 
 self.addEventListener('activate', (e) => {
@@ -39,7 +45,7 @@ self.addEventListener('fetch', (e) => {
   e.respondWith(
     caches.open(VERSION).then(async (cache) => {
       const hit = await cache.match(key, { ignoreSearch: true });
-      const fresh = fetch(req)
+      const fresh = fetch(req, { cache: 'no-cache' })
         .then((res) => {
           if (res.ok) cache.put(key, res.clone());
           return res;
