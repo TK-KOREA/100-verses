@@ -41,6 +41,52 @@ function speakButton(v, iconOnly = false) {
   return btn;
 }
 
+// ---------- 가족에게 자랑하기 ----------
+
+const APP_URL = () => new URL('./', location.href).href;
+
+/** 오늘(KST) 외운 구절. 외운 순서대로. */
+function doneToday() {
+  const t = P.kstToday();
+  return P.doneList().filter((m) => m.at.slice(0, 10) === t);
+}
+
+/** 아이가 직접 보내는 말투로 쓴다. 이름 뒤 조사를 고르지 않아도 되게 1인칭으로. */
+function shareText(app) {
+  const n = P.doneCount();
+  if (n >= STEP_COUNT) {
+    return `말씀 100계단 꼭대기에 올라왔어요! 👑\n100구절을 모두 외웠어요.\n\n${APP_URL()}`;
+  }
+  const list = doneToday();
+  const head = list.length >= 2 ? `오늘 말씀 ${list.length}계단 올랐어요! 🙌` : '오늘 말씀 한 계단 올랐어요! 🙌';
+  const verses = list.map((m) => {
+    const v = app.byId[m.id];
+    return `${v.refLong}\n${v.text}`;
+  }).join('\n\n');
+  return `${head}\n지금 ${n}번째 계단이에요.\n\n${verses}\n\n말씀 100계단\n${APP_URL()}`;
+}
+
+async function share(text) {
+  if (navigator.share) {
+    try {
+      await navigator.share({ text });
+      return;
+    } catch (e) {
+      if (e && e.name === 'AbortError') return; // 아이가 공유 창을 닫음
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    toast('자랑할 글을 복사했어요. 카톡에 붙여 넣어 보세요');
+  } catch (e) {
+    toast('지금은 보낼 수 없어요');
+  }
+}
+
+function shareButton(app, cls = 'btn primary') {
+  return h('button', { type: 'button', class: cls, onclick: () => share(shareText(app)) }, '가족에게 자랑하기');
+}
+
 // ---------- 오늘 ----------
 
 export function today(app) {
@@ -60,8 +106,43 @@ export function today(app) {
         h('p', { class: 'sub', style: 'margin-top:12px;font-size:20px' }, '100구절을 모두 마음에 담았어요.'),
       ),
       h('div', { class: 'actions stack' },
-        h('button', { type: 'button', class: 'btn primary', onclick: () => app.go('#/list') }, '모든 구절 다시 보기'),
+        shareButton(app),
         h('button', { type: 'button', class: 'btn secondary small', onclick: () => app.go('#/stairs') }, '내 계단 보기'),
+      ),
+    );
+    return { el: root, title: '오늘' };
+  }
+
+  const chipsNow = () => {
+    const c = [];
+    if (count > 0) c.push(h('span', { class: 'chip accent' }, `${count}계단 올랐어요`));
+    if (streak >= 2) c.push(h('span', { class: 'chip' }, `🔥 ${streak}일 연속`));
+    return c;
+  };
+
+  // 오늘 한 계단이라도 올랐으면 "오늘은 다 했어요". 더 하고 싶은 아이는 링크로 이어 간다.
+  const todayList = doneToday();
+  if (todayList.length) {
+    root.append(
+      h('h1', { class: 'sr-only', tabindex: '-1' }, '오늘은 다 했어요'),
+      h('div', { class: 'chips' }, chipsNow()),
+      h('section', { class: 'card done-card' },
+        h('div', { class: 'done-badge', 'aria-hidden': 'true' }, icon('check')),
+        h('h2', { class: 'title' }, '오늘은 다 했어요!'),
+        h('p', { class: 'sub', style: 'margin-top:6px' }, todayList.length >= 2 ? `오늘 ${todayList.length}계단 올랐어요` : '오늘 한 계단 올랐어요'),
+      ),
+      h('h2', { class: 'group-head' }, h('span', null, '오늘 외운 말씀')),
+      h('div', { class: 'group' }, todayList.map((m) => {
+        const tv = app.byId[m.id];
+        return h('button', { type: 'button', class: 'row', onclick: () => app.go('#/verse/' + tv.id) },
+          h('span', { class: 'num done', 'aria-hidden': 'true' }, '✓'),
+          h('span', { class: 'row-t' }, h('b', null, tv.refLong), h('p', null, tv.text.split('\n')[0])),
+          h('span', { class: 'chev', 'aria-hidden': 'true' }, '›'),
+        );
+      })),
+      h('div', { class: 'actions' },
+        shareButton(app),
+        h('button', { type: 'button', class: 'link', style: 'display:block;margin:4px auto 0', onclick: () => app.go('#/verse/' + nextId) }, '한 계단 더 오르기'),
       ),
     );
     return { el: root, title: '오늘' };
@@ -69,9 +150,7 @@ export function today(app) {
 
   const v = app.byId[nextId];
   const hello = count === 0 ? '첫 계단을 올라 볼까요?' : '오늘도 한 계단 올라가요';
-  const chips = [];
-  if (count > 0) chips.push(h('span', { class: 'chip accent' }, `${count}계단 올랐어요`));
-  if (streak >= 2) chips.push(h('span', { class: 'chip' }, `🔥 ${streak}일 연속`));
+  const chips = chipsNow();
 
   root.append(
     h('h1', { class: 'sr-only', tabindex: '-1' }, '오늘의 말씀'),
@@ -264,8 +343,8 @@ function celebrate(app, v) {
       h('p', { class: 'sub', style: 'font-size:20px;margin-top:16px;line-height:1.6' }, '100구절을 모두 마음에 담았어요.', h('br'), '정말 잘했어요.'),
       h('div', { class: 'grow' }),
       h('div', { class: 'stack' },
-        h('button', { type: 'button', class: 'btn primary', onclick: () => app.go('#/stairs') }, '내 계단 보기'),
-        h('button', { type: 'button', class: 'btn secondary small', onclick: () => app.go('#/') }, '처음 화면으로'),
+        shareButton(app),
+        h('button', { type: 'button', class: 'btn secondary small', onclick: () => app.go('#/stairs') }, '내 계단 보기'),
       ),
       h('button', { type: 'button', class: 'link', style: 'margin-top:8px', onclick: undo }, '잘못 눌렀어요'),
     );

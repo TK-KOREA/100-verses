@@ -78,7 +78,8 @@ function paintTabs(activeKey) {
 }
 
 let signature = '';
-const sig = () => JSON.stringify([P.doneList(), P.nickname()]);
+// 날짜도 넣는다: 자정이 지나면 "오늘은 다 했어요"가 새 오늘의 구절로 바뀌어야 한다.
+const sig = () => JSON.stringify([P.doneList(), P.nickname(), P.kstToday()]);
 
 function render({ keepScroll = false, first = false } = {}) {
   const r = parse(location.hash);
@@ -140,8 +141,13 @@ window.addEventListener('hashchange', () => {
 
 window.addEventListener('online', () => P.sync());
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') P.sync();
-  else S.stop();
+  if (document.visibilityState === 'visible') {
+    P.sync();
+    const cur = app.current;
+    if (cur && !cur.view.update && !app.overlay && sig() !== signature) render({ keepScroll: true });
+  } else {
+    S.stop();
+  }
 });
 
 async function boot() {
