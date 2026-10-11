@@ -156,6 +156,18 @@ button:disabled { cursor: default; }
 .steps button.done { color: var(--accent-ink); }
 .steps button[aria-current="step"] { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
 .hint { font-size: calc(20px * var(--fs)); font-weight: 700; margin-top: 20px; }
+/* 1단계 읽은 횟수, 4단계 말해 보기 */
+.practice-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 10px; }
+.practice-tools:empty { display: none; }
+.read-dots { display: flex; gap: 10px; }
+.read-dot {
+  width: 52px; height: 52px; border-radius: 26px; border: 2px dashed var(--line-strong); background: var(--surface);
+  font-size: 20px; font-weight: 800; color: var(--text-2);
+}
+.read-dot[aria-pressed="true"] { background: var(--accent); border: 2px solid var(--accent); color: var(--accent-on); animation: pop .3s cubic-bezier(.2, .9, .3, 1.4) both; }
+.listen-btn { min-height: 52px; padding: 0 20px; font-size: 18px; }
+.listen-btn[aria-pressed="true"] { background: var(--accent); color: var(--accent-on); }
+.listen-msg { font-size: calc(17px * var(--fs)); font-weight: 700; color: var(--accent-ink); }
 .practice-verse { font-size: calc(27px * var(--fs)); line-height: 1.9; font-weight: 600; margin-top: 12px; }
 .practice-verse .line { display: block; }
 .w { white-space: nowrap; }
@@ -245,6 +257,25 @@ button:disabled { cursor: default; }
 
 /* ── 내 계단 ───────────────── */
 .head-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.stairs-head {
+  position: sticky; top: 0; z-index: 5; background: var(--bg);
+  margin: calc(-1 * var(--safe-t) - 20px) -16px 0; padding: calc(var(--safe-t) + 16px) 16px 8px;
+}
+.head-count {
+  display: inline-block; margin-left: 10px; padding: 2px 10px; border-radius: 14px; vertical-align: 5px;
+  background: var(--accent-soft); color: var(--accent-ink); font-size: 16px; font-weight: 800; letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 홈 화면 추가 안내(브라우저로 열었을 때만) */
+.install-hint {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 8px;
+  margin-bottom: 16px; padding: 8px 8px 8px 16px; border-radius: 16px;
+  background: var(--surface); border: 1px solid var(--line);
+}
+.install-hint p { font-size: 16px; font-weight: 700; }
+.install-actions { display: flex; gap: 4px; margin-left: auto; }
+.text-btn.ghost { background: transparent; color: var(--text-2); }
 .text-btn {
   min-height: 48px; padding: 0 16px; border-radius: 24px; border: 0; background: var(--surface-2);
   display: inline-flex; align-items: center; gap: 6px; font-size: 17px; font-weight: 700; text-decoration: none; color: var(--text);
@@ -270,6 +301,7 @@ button:disabled { cursor: default; }
 }
 .stair button.done { background: var(--accent); color: var(--accent-on); }
 .stair button.now { background: var(--surface); color: var(--accent-ink); box-shadow: inset 0 0 0 3px var(--accent); }
+.stair .here { z-index: 3; }
 .stair .here {
   position: absolute; top: -34px; background: var(--text); color: var(--bg); font-size: 14px; font-weight: 800;
   padding: 4px 10px; border-radius: 10px; white-space: nowrap; pointer-events: none;

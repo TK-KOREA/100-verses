@@ -3,10 +3,11 @@
 import { h, icon, art, toast } from './ui.js';
 import * as P from './progress.js';
 import * as S from './speech.js';
+import * as L from './listen.js';
 
 const STEP_NAMES = ['읽기', '첫 글자', '빈칸', '혼자'];
 const HINTS = [
-  '소리 내어 세 번 읽어 봐요',
+  '소리 내어 읽을 때마다 눌러요',
   '첫 글자를 보고 말해 봐요',
   '가려진 곳을 누르면 보여요',
   '안 보고 말해 봐요. 막히면 눌러서 살짝 봐요',
@@ -60,6 +61,35 @@ function doneToday() {
   return P.doneList().filter((m) => m.at.slice(0, 10) === t);
 }
 
+// ---------- 홈 화면 추가 안내 ----------
+
+const isInstalled = () =>
+  window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+
+/**
+ * 브라우저로 열었을 때만 오늘 화면 맨 위에 한 줄. iPhone은 Safari와 홈 화면 앱이 저장소를 따로 쓰므로
+ * 처음부터 홈 화면에서 쓰게 하려는 것이다. 닫으면 다시 띄우지 않고, 설치하면 저절로 사라진다.
+ */
+function installHint() {
+  if (isInstalled() || P.load('install_hint_closed', false)) return null;
+  const card = h('div', { class: 'install-hint', role: 'note' });
+  card.append(
+    h('p', null, '홈 화면에 추가하면 앱처럼 쓸 수 있어요'),
+    h('div', { class: 'install-actions' },
+      h('a', { class: 'text-btn', href: '#/settings?home' }, '방법 보기'),
+      h('button', {
+        type: 'button',
+        class: 'text-btn ghost',
+        onclick: () => {
+          P.save('install_hint_closed', true);
+          card.remove();
+        },
+      }, '닫기'),
+    ),
+  );
+  return card;
+}
+
 // ---------- 오늘 ----------
 
 export function today(app) {
@@ -96,8 +126,9 @@ export function today(app) {
   // 오늘 한 계단이라도 올랐으면 "오늘은 다 했어요". 더 하고 싶은 아이는 링크로 이어 간다.
   const todayList = doneToday();
   if (todayList.length) {
-    root.append(
+    root.append(...[
       h('h1', { class: 'sr-only', tabindex: '-1' }, '오늘은 다 했어요'),
+      installHint(),
       h('div', { class: 'chips' }, chipsNow()),
       h('section', { class: 'card done-card' },
         h('div', { class: 'done-badge', 'aria-hidden': 'true' }, icon('check')),
@@ -116,7 +147,7 @@ export function today(app) {
       h('div', { class: 'actions' },
         h('button', { type: 'button', class: 'btn secondary small', onclick: () => app.go('#/verse/' + nextId) }, '한 계단 더 오르기'),
       ),
-    );
+    ].filter(Boolean));
     return { el: root, title: '오늘' };
   }
 
@@ -124,8 +155,9 @@ export function today(app) {
   const hello = count === 0 ? '첫 계단을 올라 볼까요?' : '오늘도 한 계단 올라가요';
   const chips = chipsNow();
 
-  root.append(
+  root.append(...[
     h('h1', { class: 'sr-only', tabindex: '-1' }, '오늘의 말씀'),
+    installHint(),
     h('p', { class: 'sub hello' }, name ? `안녕, ${name}! ${hello}` : `안녕! ${hello}`),
     chips.length ? h('div', { class: 'chips' }, chips) : h('div', { style: 'height:12px' }),
     h('article', { class: 'card' },
@@ -138,7 +170,7 @@ export function today(app) {
       speakButton(v),
       h('button', { type: 'button', class: 'btn primary', onclick: () => app.go('#/verse/' + v.id) }, '외우러 가기'),
     ),
-  );
+  ].filter(Boolean));
   return { el: root, title: '오늘' };
 }
 
@@ -159,12 +191,17 @@ export function verse(app, id) {
     fn();
   };
   const opened = new Set();
+  let reads = 0; // 1단계: 소리 내어 읽은 횟수(아이가 눌러 센다)
+  let nextBtn = null;
+  let stopListen = null; // 4단계 말해 보기
+  let listenMsg = '';
 
   const root = h('div', { class: 'page-practice' });
   const title = h('h1', { tabindex: '-1' }, v.refLong);
   const steps = h('div', { class: 'steps', role: 'group', 'aria-label': '연습 단계' });
   const hint = h('p', { class: 'hint', 'aria-live': 'polite' });
   const text = h('p', { class: 'practice-verse', lang: 'ko' });
+  const tools = h('div', { class: 'practice-tools' });
   const doneNote = h('div', { class: 'done-note' });
   const actions = h('div', { class: 'practice-actions stack' });
 
@@ -178,7 +215,7 @@ export function verse(app, id) {
       h('span', { class: 'eyebrow' }, topicLabel(v)),
       v.excerpt ? h('span', { class: 'tag', style: 'margin-left:0' }, '일부') : null,
     ),
-    steps, hint, text,
+    steps, hint, tools, text,
     v.excerpt ? h('p', { class: 'excerpt' }, `말씀 일부: ${v.excerptNote}`) : null,
     doneNote,
     h('div', { class: 'grow' }),
@@ -186,9 +223,100 @@ export function verse(app, id) {
   ].filter(Boolean)); // DOM append는 null을 "null" 글자로 넣는다
 
   function setStage(s) {
+    endListen();
     stage = s;
     opened.clear();
+    reads = 0;
+    listenMsg = '';
     render();
+  }
+
+  // ---- 1단계: 세 번 읽기 세기. 셋이 다 차면 "다음 단계"가 주황으로 바뀐다(건너뛰는 것을 막지는 않는다).
+  function paintNext() {
+    if (nextBtn && stage === 1) nextBtn.className = reads >= 3 ? 'btn primary' : 'btn secondary';
+  }
+  function readDots() {
+    return h('div', { class: 'read-dots', role: 'group', 'aria-label': '읽은 횟수' }, [1, 2, 3].map((i) => h('button', {
+      type: 'button',
+      class: 'read-dot',
+      'aria-pressed': String(i <= reads),
+      'aria-label': `${i}번 읽었어요`,
+      onclick: () => {
+        reads = i <= reads ? i - 1 : i; // 마지막 칸을 다시 누르면 하나 뺀다
+        tools.replaceChildren(readDots());
+        paintNext();
+      },
+    }, i <= reads ? '✓' : String(i))));
+  }
+
+  // ---- 4단계: 말해 보기. 맞게 말한 어절의 빈칸을 앞에서부터 연다.
+  function hiddenWords() {
+    const words = [];
+    let k = 0;
+    v.text.split('\n').forEach((line) => line.split(' ').filter(Boolean).forEach((w) => {
+      const idx = k++;
+      if (!opened.has(idx)) words.push({ idx, text: w });
+    }));
+    return { words, total: k };
+  }
+  function endListen() {
+    if (stopListen) {
+      const stop = stopListen;
+      stopListen = null;
+      stop();
+    }
+  }
+  function paintListen() {
+    if (stage !== 4 || !L.canListen()) return;
+    const on = !!stopListen;
+    tools.replaceChildren(
+      h('button', {
+        type: 'button',
+        class: 'text-btn listen-btn',
+        'aria-pressed': String(on),
+        onclick: () => (stopListen ? (endListen(), paintListen()) : startListen()),
+      }, icon('mic'), on ? '그만 듣기' : '말해 보기'),
+      listenMsg ? h('p', { class: 'listen-msg', role: 'status' }, listenMsg) : null,
+    );
+  }
+  function startListen() {
+    S.stop();
+    const before = new Set(opened);
+    listenMsg = '듣고 있어요. 외운 대로 말해 봐요';
+    stopListen = L.listen({
+      onText: (said) => {
+        // 이번에 듣기 시작할 때 아직 가려져 있던 어절만 맞춰 본다(처음부터 다시 말해도 이어진다).
+        const { total } = hiddenWords();
+        const words = [];
+        let k = 0;
+        v.text.split('\n').forEach((line) => line.split(' ').filter(Boolean).forEach((w) => {
+          const idx = k++;
+          if (!before.has(idx)) words.push({ idx, text: w });
+        }));
+        L.matchSpoken(words, said).forEach((idx) => opened.add(idx));
+        renderText();
+        if (opened.size >= total) {
+          listenMsg = '다 맞았어요! 🎉';
+          endListen();
+        } else {
+          listenMsg = `${opened.size} / ${total} 열렸어요`;
+        }
+        paintListen();
+      },
+      onError: (code) => {
+        listenMsg = L.errorText(code);
+        stopListen = null;
+        paintListen();
+      },
+      onEnd: () => {
+        if (stopListen) {
+          stopListen = null;
+          if (hiddenWords().words.length) listenMsg = '다시 누르면 이어서 들어요';
+        }
+        paintListen();
+      },
+    });
+    paintListen();
   }
 
   function renderText() {
@@ -241,7 +369,10 @@ export function verse(app, id) {
       }, h('span', { 'aria-hidden': 'true' }, s < stage ? '✓' : String(s)), h('span', { 'aria-hidden': 'true', style: 'font-size:16px;font-weight:700' }, name));
     }));
     hint.textContent = HINTS[stage - 1];
+    tools.replaceChildren();
+    if (stage === 1) tools.append(readDots());
     renderText();
+    paintListen();
 
     const done = P.isDone(v.id);
     lastDone = done;
@@ -262,8 +393,11 @@ export function verse(app, id) {
 
     actions.replaceChildren();
     lockUntil = performance.now() + 400;
+    nextBtn = null;
     if (stage < 4) {
-      actions.append(h('button', { type: 'button', class: 'btn primary', onclick: guard(() => setStage(stage + 1)) }, '다음 단계'));
+      nextBtn = h('button', { type: 'button', class: 'btn primary', onclick: guard(() => setStage(stage + 1)) }, '다음 단계');
+      actions.append(nextBtn);
+      paintNext();
     } else if (!done) {
       actions.append(
         h('button', { type: 'button', class: 'btn primary', onclick: guard(climb) }, '외웠어요!'),
@@ -279,13 +413,19 @@ export function verse(app, id) {
 
   function climb() {
     S.stop();
+    endListen();
     P.setMark(v.id, true);
     celebrate(app, v);
   }
 
   render();
   // 서버와 주고받을 때마다 다시 그리면 열어 둔 빈칸이 닫히므로, 외운 상태가 바뀔 때만 그린다.
-  return { el: root, title: v.refLong, update: () => { if (P.isDone(v.id) !== lastDone) render(); } };
+  return {
+    el: root,
+    title: v.refLong,
+    update: () => { if (P.isDone(v.id) !== lastDone) render(); },
+    cleanup: endListen,
+  };
 }
 
 function celebrate(app, v) {
@@ -293,7 +433,7 @@ function celebrate(app, v) {
   const streak = P.streak();
   const next = P.nextVerseId(app.verses);
   const all = next == null;
-  // arming: 뜬 직후 0.7초는 버튼이 눌리지 않는다("외웠어요!" 두 번 누름이 "오늘은 여기까지"에 닿지 않게).
+  // arming: 뜬 직후 0.7초는 버튼이 눌리지 않는다("외웠어요!" 두 번 누름이 아래 버튼에 닿지 않게).
   const ov = h('div', { class: 'overlay arming' + (all ? ' summit' : ''), role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'cel-title' });
   setTimeout(() => ov.classList.remove('arming'), 700);
   const inner = h('div', { class: 'overlay-inner' });
@@ -335,8 +475,8 @@ function celebrate(app, v) {
       h('p', { class: 'sub', style: 'font-size:20px;margin-top:12px;line-height:1.6' }, lines.flatMap((l, i) => (i ? [h('br'), l] : [l]))),
       h('div', { class: 'grow' }),
       h('div', { class: 'stack' },
-        h('button', { type: 'button', class: 'btn primary', onclick: () => app.go('#/verse/' + next, { replace: true }) }, '다음 구절 보기'),
-        h('button', { type: 'button', class: 'btn secondary small', onclick: () => app.go('#/') }, '오늘은 여기까지'),
+        h('button', { type: 'button', class: 'btn primary', onclick: () => app.go('#/') }, '오늘은 여기까지'),
+        h('button', { type: 'button', class: 'btn secondary small', onclick: () => app.go('#/verse/' + next, { replace: true }) }, '한 계단 더 오르기'),
       ),
       h('button', { type: 'button', class: 'link', style: 'margin-top:8px', onclick: undo }, '잘못 눌렀어요'),
     );
@@ -516,11 +656,12 @@ export function stairs(app) {
   }, n >= STEP_COUNT ? '👑 100 · 꼭대기' : '100 · 꼭대기'));
 
   const root = h('div', null,
-    h('div', { class: 'head-row' },
-      h('h1', { class: 'title', tabindex: '-1' }, '내 계단'),
+    // 계단 중간으로 스크롤해도 몇 계단인지 보이게 제목 줄을 위에 붙인다.
+    h('div', { class: 'head-row stairs-head' },
+      h('h1', { class: 'title', tabindex: '-1' }, '내 계단', h('span', { class: 'head-count' }, `${n} / ${STEP_COUNT}`)),
       h('a', { class: 'text-btn', href: '#/settings' }, icon('gear'), '설정'),
     ),
-    h('div', { class: 'card', style: 'margin-top:12px;padding:20px' },
+    h('div', { class: 'card', style: 'margin-top:4px;padding:20px' },
       h('div', { class: 'summary' },
         h('p', { class: 'count' }, String(n), h('small', null, ` / ${STEP_COUNT}계단`)),
         streak >= 2 ? h('span', { class: 'chip' }, `🔥 ${streak}일 연속`) : h('span'),
@@ -724,7 +865,7 @@ export function settings(app, _id, query) {
     ),
     speedSeg ? h('section', { class: 'section' }, h('h2', null, '읽어 주는 빠르기'), speedSeg) : null,
     h('section', { class: 'section' }, h('h2', null, '저장 상태'), h('div', { class: 'card' }, statusBox)),
-    h('section', { class: 'section' },
+    h('section', { class: 'section', id: 'home-section' },
       h('h2', null, '홈 화면에 추가하기'),
       h('div', { class: 'card' },
         h('p', { style: 'font-size:18px;font-weight:800' }, 'iPhone'),
@@ -751,6 +892,8 @@ export function settings(app, _id, query) {
       if (query === 'restore') {
         document.getElementById('restore-section').scrollIntoView({ block: 'start' });
         restoreInput.focus({ preventScroll: true });
+      } else if (query === 'home') {
+        document.getElementById('home-section').scrollIntoView({ block: 'start' });
       }
     },
   };

@@ -41,6 +41,12 @@
 node gas/test/run.js
 ```
 
+```bash
+node test/listen.mjs
+```
+
+`test/listen.mjs`는 4단계 "말해 보기"가 말한 글과 어절을 맞춰 보는 규칙을 시험한다.
+
 화면까지 보려면 흉내 서버와 정적 서버를 띄우고 `http://localhost:8100/web/?api=http://localhost:8741/exec`를 연다. `FAIL=0.3`을 주면 요청의 30%를 구글 오류 페이지로 흉내 낸다.
 
 ```bash

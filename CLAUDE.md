@@ -28,7 +28,7 @@
 
 ## 시험
 
-`node gas/test/run.js` (서버 논리). 화면은 README의 "내 컴퓨터에서 시험".
+`node gas/test/run.js` (서버 논리), `node test/listen.mjs` (말해 보기 맞춰 보기). 화면은 README의 "내 컴퓨터에서 시험".
 
 ## 사용자
 
