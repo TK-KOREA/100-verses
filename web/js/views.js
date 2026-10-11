@@ -424,8 +424,17 @@ export function list(app) {
       if (on) topics.scrollTo({ left: b.offsetLeft - 16, behavior: 'smooth' });
     });
   }
+  // 칩으로 이동한 주제. 끝쪽 주제는 목록이 바닥에 닿아 제목 줄까지 못 올라오므로, 바닥에서는 누른 칩을 그대로 둔다.
+  let jumped = null;
   function spy() {
     if (!root.isConnected) return;
+    const atBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
+    if (atBottom) {
+      const secs = body.querySelectorAll('section');
+      if (jumped != null && body.querySelector(`section[data-g="${jumped}"]`)) setActive(jumped);
+      else if (secs.length) setActive(secs[secs.length - 1].dataset.g);
+      return;
+    }
     const line = head.getBoundingClientRect().bottom + 8;
     let cur = body.querySelector('section');
     body.querySelectorAll('section').forEach((s) => {
@@ -437,9 +446,14 @@ export function list(app) {
     const sec = body.querySelector(`section[data-g="${gi}"]`);
     if (!sec) return;
     const top = sec.getBoundingClientRect().top + window.scrollY - head.offsetHeight + 1;
+    jumped = String(gi);
     window.scrollTo({ top, behavior: 'smooth' });
     setActive(gi);
   }
+  // 손으로 스크롤하기 시작하면 칩 고정을 푼다.
+  const release = () => { jumped = null; };
+  window.addEventListener('touchstart', release, { passive: true });
+  window.addEventListener('wheel', release, { passive: true });
   let ticking = false;
   const onScroll = () => {
     if (ticking) return;
@@ -452,7 +466,15 @@ export function list(app) {
   window.addEventListener('scroll', onScroll, { passive: true });
 
   render();
-  return { el: root, title: '모든 구절', cleanup: () => window.removeEventListener('scroll', onScroll) };
+  return {
+    el: root,
+    title: '모든 구절',
+    cleanup: () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('touchstart', release);
+      window.removeEventListener('wheel', release);
+    },
+  };
 }
 
 // ---------- 내 계단 ----------
