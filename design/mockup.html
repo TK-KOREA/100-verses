@@ -187,29 +187,149 @@ body {
 .empty .btn { margin-top: 24px; }
 
 /* 계단 */
-.summary { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 8px; }
-.summary .count { font-size: 56px; font-weight: 900; line-height: 1; color: var(--accent); letter-spacing: -0.03em; }
-.summary .count small { font-size: 22px; color: var(--text-2); font-weight: 800; letter-spacing: 0; }
-.bar { height: 12px; border-radius: 6px; background: var(--step-todo); margin-top: 14px; overflow: hidden; }
-.bar i { display: block; height: 100%; background: var(--accent); border-radius: 6px; }
-.stairs-wrap { flex: 1; margin: 16px -16px 0; padding: 0 16px; position: relative; }
-.stairs { display: flex; flex-direction: column-reverse; padding: 24px 0 8px; }
+.head-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; }
+.goal { margin-top: 12px; padding: 18px 20px 16px; flex: none; }
+.goal-k { font-size: 17px; font-weight: 800; color: var(--text-2); }
+.goal-n { font-size: 44px; font-weight: 900; color: var(--accent); line-height: 1.1; letter-spacing: -0.03em; margin-top: 2px; }
+.goal-n small { font-size: 22px; font-weight: 800; color: var(--text); letter-spacing: 0; margin-left: 4px; }
+.flight { display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; margin-top: 12px; }
+.flight i { height: 12px; border-radius: 6px; background: var(--step-todo); }
+.flight i.on { background: var(--accent); }
+.flight i.next { background: var(--surface); box-shadow: inset 0 0 0 2px var(--accent); }
+.goal-sub { font-size: 16px; font-weight: 600; color: var(--text-2); margin-top: 10px; line-height: 1.5; }
+.goal-sub b { color: var(--text); font-weight: 800; }
+.stairs-wrap { flex: 1; margin: 8px -16px 0; padding: 0 16px; position: relative; }
+.stairs { display: flex; flex-direction: column-reverse; padding: 16px 0 8px; }
 .stair { height: 52px; position: relative; }
 .stair button {
-  position: absolute; top: 0; height: 52px; width: 92px; border: 0; font-family: inherit;
-  border-radius: 12px 12px 4px 4px; font-size: 18px; font-weight: 800;
+  position: absolute; top: 0; height: 52px; width: 112px; padding: 0 6px; border: 0; font-family: inherit;
+  border-radius: 12px 12px 4px 4px; font-size: 16px; font-weight: 800; letter-spacing: -0.02em; white-space: nowrap;
   background: var(--step-todo); color: var(--text-2);
   box-shadow: inset 0 -6px 0 rgba(0,0,0,.08);
 }
 .stair button.done { background: var(--accent); color: var(--accent-on); }
-.stair button.now { background: var(--surface); color: var(--accent-ink); box-shadow: inset 0 0 0 3px var(--accent); }
-.stair .here { position: absolute; top: -34px; background: var(--text); color: var(--bg); font-size: 14px; font-weight: 800;
+.stair button.now { background: var(--surface); color: var(--accent-ink); box-shadow: inset 0 0 0 3px var(--accent); font-size: 18px; }
+.stair button.pick { outline: 3px solid var(--text); outline-offset: 3px; }
+.stair .here { position: absolute; top: 12px; background: var(--text); color: var(--bg); font-size: 14px; font-weight: 800;
   padding: 4px 10px; border-radius: 10px; white-space: nowrap; }
-.landing { height: 56px; margin: 4px 0; border-radius: 14px; background: var(--surface); border: 1px dashed var(--line);
+.ground { text-align: center; font-size: 15px; font-weight: 800; color: var(--text-2); padding: 10px 0 4px; margin-top: 6px; border-top: 3px solid var(--line); }
+.landing { height: 56px; margin: 4px 0; border-radius: 14px; background: var(--surface); border: 1px dashed var(--line-strong);
   display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 16px; font-weight: 800; color: var(--text-2); }
 .landing.reached { border-style: solid; color: var(--accent-ink); background: var(--accent-soft); border-color: transparent; }
-.summit { height: 72px; border-radius: 18px; background: var(--surface); border: 2px dashed var(--line); display: flex; align-items: center;
-  justify-content: center; font-size: 18px; font-weight: 800; color: var(--text-2); margin-bottom: 8px; }
+.clouds { position: relative; height: 172px; margin-top: 8px; }
+.clouds svg { position: absolute; inset: 0; width: 100%; height: 100%; filter: drop-shadow(0 4px 10px rgba(0,0,0,.08)); }
+.clouds p { position: absolute; left: 0; right: 0; text-align: center; color: var(--text-2); }
+.clouds .t { bottom: 46px; font-size: 18px; font-weight: 800; color: var(--text); }
+.clouds .s { bottom: 20px; font-size: 15px; font-weight: 600; }
+.peak { align-self: center; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 18px; border-radius: 22px;
+  border: 2px dashed var(--line-strong); background: var(--bg); font-size: 16px; font-weight: 800; color: var(--text-2); margin-bottom: 4px; }
+
+/* 말씀 카드(아래에서 올라옴) */
+.scrim { position: absolute; inset: 0; background: rgba(20,16,12,.42); }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; background: var(--surface); border-radius: 28px 28px 0 0;
+  padding: 8px 20px 34px; box-shadow: 0 -8px 30px rgba(0,0,0,.18); }
+.grab { width: 44px; height: 5px; border-radius: 3px; background: var(--line); margin: 0 auto 8px; }
+.sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.sheet-tools { display: flex; gap: 8px; flex: none; }
+.sheet .ref { margin-top: 2px; }
+.sheet .verse { margin-top: 10px; margin-bottom: 20px; }
+.when { display: inline-flex; align-items: center; min-height: 36px; padding: 0 14px; border-radius: 18px; margin: 14px 0 18px;
+  background: var(--accent-soft); color: var(--accent-ink); font-size: 16px; font-weight: 800; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.two .btn { font-size: 19px; padding: 0 8px; }
+
+/* 2안: 내 말씀 */
+.sec-t { font-size: 18px; font-weight: 800; margin: 20px 4px 10px; display: flex; justify-content: space-between; align-items: baseline; }
+.sec-t small { font-size: 15px; font-weight: 700; color: var(--text-2); }
+.pocket { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.pocket button { position: relative; min-height: 92px; border-radius: 18px; border: 1px solid var(--line); background: var(--surface);
+  font-family: inherit; color: var(--text); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  padding: 10px 4px; font-size: 16px; font-weight: 800; line-height: 1.25; }
+.pocket .e { font-size: 30px; line-height: 1; }
+.pocket .n { position: absolute; top: 6px; right: 6px; min-width: 24px; height: 24px; padding: 0 7px; border-radius: 12px;
+  background: var(--accent); color: var(--accent-on); font-size: 14px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+.pocket button.none { background: var(--surface-2); border-color: transparent; color: var(--text-2); }
+.pocket button.none .e { filter: grayscale(1); opacity: .45; }
+.found-card { position: relative; overflow: hidden; padding: 28px 12px 6px; }
+.glory { position: absolute; left: -20%; right: -20%; top: -70px; height: 130px; pointer-events: none;
+  background: radial-gradient(50% 50% at 50% 50%, rgba(255,214,120,.55), rgba(255,214,120,0)); }
+.founds { position: relative; display: flex; flex-direction: column-reverse; gap: 4px; }
+.frow { display: grid; grid-template-columns: 74px 1fr; align-items: center; min-height: 30px; border-radius: 10px; padding: 0 6px; }
+.frow.lit { background: color-mix(in srgb, var(--g) 16%, transparent); }
+.frow .fn { font-size: 14px; font-weight: 800; color: var(--text-2); white-space: nowrap; display: flex; align-items: center; gap: 4px; }
+.frow.lit .fn { color: var(--text); }
+.facets { display: flex; gap: 5px; flex-wrap: nowrap; }
+.facet { width: 13px; height: 13px; margin: 4px 1px; border-radius: 3px; transform: rotate(45deg); flex: none;
+  border: 1.5px dashed var(--line-strong); opacity: .6; }
+.facet.on { border: 0; opacity: 1; background: linear-gradient(135deg, rgba(255,255,255,.55) 0 30%, transparent 30%), var(--g); box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+.facet.next { border: 2.5px solid var(--accent); opacity: 1; background: var(--surface); }
+.found-card.mini { width: 100%; background: transparent; padding-top: 30px; }
+.found-card.mini { padding: 26px 8px 0; }
+.found-card.mini .founds { gap: 2px; }
+.found-card.mini .frow { min-height: 21px; grid-template-columns: 70px 1fr; }
+.found-card.mini .frow .fn { font-size: 12px; }
+.found-card.mini .facet { width: 10px; height: 10px; margin: 2px 1px; }
+.found-done { background: radial-gradient(120% 55% at 50% 22%, #FFF1CF, var(--bg) 72%); }
+/* 보석 B: 상자 */
+.gem-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.gcell { min-height: 104px; border-radius: 18px; border: 1px solid var(--line); background: var(--surface); font-family: inherit; color: var(--text);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 8px 4px; }
+.gcell b { font-size: 15px; font-weight: 800; margin-top: 4px; }
+.gcell small { font-size: 13px; font-weight: 700; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.gcell.full { background: color-mix(in srgb, var(--g) 14%, var(--surface)); border-color: transparent; }
+.gcell.cur { box-shadow: inset 0 0 0 2.5px var(--accent); border-color: transparent; }
+.gcell.todo b { color: var(--text-2); }
+/* 보석 C: 무지개 원 */
+.ring-wrap { position: relative; }
+.ring-wrap svg { display: block; width: 100%; height: auto; }
+.now-line { display: flex; align-items: center; gap: 12px; min-height: 64px; margin-top: 4px; padding: 10px 16px; border-radius: 18px;
+  background: var(--surface); border: 1px solid var(--line); width: 100%; font-family: inherit; color: var(--text); text-align: left; }
+.now-line b { display: block; font-size: 17px; font-weight: 800; }
+.now-line small { font-size: 15px; color: var(--text-2); font-weight: 600; }
+.now-line .chev { margin-left: auto; font-size: 22px; }
+/* 보석 D: 지금 보석 */
+.now-card { padding: 18px 16px 8px; }
+.now-top { display: grid; grid-template-columns: 60px 1fr auto; gap: 12px; align-items: center; }
+.now-top p { font-size: 14px; font-weight: 800; color: var(--accent-ink); }
+.now-top b { display: block; font-size: 22px; font-weight: 900; }
+.now-top small { font-size: 15px; color: var(--text-2); font-weight: 600; }
+.now-top .cnt { font-size: 22px; font-weight: 900; color: var(--text); font-variant-numeric: tabular-nums; }
+.now-top .cnt small { font-size: 15px; }
+.vrow { display: flex; align-items: center; gap: 10px; min-height: 52px; border-top: 1px solid var(--line); font-size: 18px; font-weight: 700; }
+.now-top { margin-bottom: 12px; }
+.vrow .dot { width: 26px; height: 26px; border-radius: 13px; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 900; flex: none; }
+.vrow.done .dot { background: var(--g); color: #fff; }
+.vrow.next .dot { box-shadow: inset 0 0 0 2.5px var(--accent); color: var(--accent-ink); }
+.vrow.todo { color: var(--text-2); font-weight: 600; }
+.vrow.todo .dot { background: var(--step-todo); }
+.vrow .go { margin-left: auto; min-height: 44px; padding: 0 14px; border-radius: 14px; border: 0; background: var(--accent); color: var(--accent-on);
+  font-family: inherit; font-size: 16px; font-weight: 800; }
+.vmore { min-height: 44px; display: flex; align-items: center; border-top: 1px solid var(--line); font-size: 16px; color: var(--text-2); font-weight: 700; }
+.strip { display: flex; justify-content: space-between; margin-top: 10px; padding: 10px 6px; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; }
+.strip button { width: 26px; min-height: 44px; border: 0; background: none; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: 10px; }
+.strip button.cur { box-shadow: 0 0 0 2.5px var(--accent); }
+.vrow { width: 100%; background: none; border-left: 0; border-right: 0; border-bottom: 0; font-family: inherit; color: inherit; text-align: left; padding: 0; }
+.vrow .chev { margin-left: auto; color: var(--text-2); font-size: 20px; }
+.to-now { width: 100%; min-height: 48px; border: 0; border-top: 1px solid var(--line); background: none; font-family: inherit; font-size: 17px; font-weight: 800; color: var(--accent-ink); }
+.gem-burst { position: relative; display: flex; justify-content: center; }
+.gem-burst::before { content: ""; position: absolute; inset: -40px; background: radial-gradient(closest-side, color-mix(in srgb, var(--g) 35%, transparent), transparent); }
+.gem-burst svg { position: relative; }
+.celebrate .mini-ring { width: 140px; margin-top: 18px; }
+.done-ring { width: 100%; max-width: 300px; }
+/* 보석 E: 목걸이 */
+.neck svg { display: block; width: 100%; height: auto; }
+.pv { margin-top: 12px; padding: 18px 18px 20px; }
+.pv-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pv-head .ref { font-size: 22px; margin: 0; }
+.pv .verse { margin-top: 8px; }
+.locked { display: flex; width: 100%; border: 0; font-family: inherit; text-align: left; align-items: center; gap: 10px; min-height: 56px; padding: 0 16px; border-radius: 16px; background: var(--surface-2);
+  font-size: 17px; color: var(--text-2); font-weight: 600; }
+.locked + .locked { margin-top: 8px; }
+.locked b { color: var(--text); font-weight: 800; }
+.pair-table { background: var(--surface); color: var(--text); border-radius: 20px; border: 1px solid var(--line); overflow: hidden; }
+.pair-table div { padding: 12px 16px; font-size: 15px; line-height: 1.6; }
+.pair-table div + div { border-top: 1px solid var(--line); }
+.pair-table b { display: block; font-size: 16px; }
 
 /* 정상 */
 .summit-screen { background: linear-gradient(180deg, var(--accent-soft), var(--bg) 70%); }
@@ -363,28 +483,194 @@ body {
   </ul>
 </div>
 
-<!-- 8. 내 계단 -->
+<!-- 8. 내 계단 (다음 목표 + 구름) -->
 <div class="frame-wrap">
   <div class="frame-label">계단 <b>09 · 내 계단</b></div>
   <div class="phone">
     <div class="status"><span>9:41</span><span class="dots">●●● ▮</span></div>
     <div class="body" style="padding-bottom:0">
-      <h1 class="title">내 계단</h1>
-      <div class="card" style="margin-top:12px;padding:20px">
-        <div class="summary">
-          <p class="count">9<small> / 100계단</small></p>
-          <span class="chip">🔥 4일 연속</span>
-        </div>
-        <div class="bar"><i style="width:9%"></i></div>
+      <div class="head-row">
+        <h1 class="title">내 계단</h1>
+        <span class="chip">🔥 4일 연속</span>
       </div>
-      <div class="stairs-wrap scroll" id="stairsWrap"><div class="stairs" id="stairs"></div></div>
+      <div class="card goal">
+        <p class="goal-k">쉬는 참까지</p>
+        <p class="goal-n">1<small>계단 남았어요</small></p>
+        <div class="flight" data-done="9" aria-hidden="true"></div>
+        <p class="goal-sub">지금 <b>9계단</b> · 이대로 오르면 <b>내년 7월쯤</b> 꼭대기</p>
+      </div>
+      <div class="stairs-wrap scroll" data-stairs="9"><div class="stairs"></div></div>
     </div>
     <nav class="tabbar" data-tab="2"></nav>
   </div>
   <ul class="notes">
-    <li>계단은 10칸씩 지그재그로 오르고, 사이마다 "쉬는 참"이 있습니다.</li>
-    <li>오른 계단을 누르면 그 구절이 열립니다. 처음 열면 "지금 여기"로 스크롤됩니다.</li>
-    <li>복습·백업 버튼은 2차에서 이 화면 위쪽에 더합니다.</li>
+    <li>숫자는 한 번만 보여 줍니다. 100칸 막대(9%) 대신 지금 오르는 10칸 막대(9/10)를 보여 줘서 "거의 다 왔다"가 보이게 합니다.</li>
+    <li>꼭대기 날짜는 첫 계단부터 오늘까지의 빠르기로 셉니다. 3계단·3일이 넘었을 때만, 날짜가 아니라 "○월쯤"으로 보여 줍니다.</li>
+    <li>다음 쉬는 참 위로는 구름으로 가립니다. 쉬는 참에 닿으면 구름이 걷히고 다음 10계단이 보입니다. 꼭대기는 구름 위로 늘 보입니다.</li>
+    <li>외운 계단에는 숫자 대신 장절(줄임말)을 적습니다. 그래서 계단 한 칸을 112px로 넓힙니다.</li>
+    <li>"지금 여기"는 계단 옆에 붙여서 위 칸이나 쉬는 참을 가리지 않습니다.</li>
+    <li>계단 코드 줄은 뺍니다(설정에 있음). 복습은 2차에서 이 화면 위쪽에 더합니다.</li>
+  </ul>
+</div>
+
+<!-- 8-2. 내 계단 – 첫날 -->
+<div class="frame-wrap">
+  <div class="frame-label">계단 <b>09-2 · 처음 온 아이</b></div>
+  <div class="phone">
+    <div class="status"><span>9:41</span><span class="dots">●●● ▮</span></div>
+    <div class="body" style="padding-bottom:0">
+      <div class="head-row">
+        <h1 class="title">내 계단</h1>
+      </div>
+      <div class="card goal">
+        <p class="goal-k">첫 쉬는 참까지</p>
+        <p class="goal-n">10<small>계단</small></p>
+        <div class="flight" data-done="0" aria-hidden="true"></div>
+        <p class="goal-sub">첫 계단을 올라 볼까요?</p>
+      </div>
+      <div class="stairs-wrap scroll" data-stairs="0"><div class="stairs"></div></div>
+    </div>
+    <nav class="tabbar" data-tab="2"></nav>
+  </div>
+  <ul class="notes">
+    <li>처음 온 아이에게 비어 있는 99칸 대신 10칸만 보여 줍니다.</li>
+    <li>연속 일수와 꼭대기 날짜는 셀 것이 생길 때까지 숨깁니다.</li>
+    <li>1번 계단("지금 여기")을 누르면 바로 오늘의 구절로 갑니다.</li>
+  </ul>
+</div>
+
+<!-- 8-3. 내 계단 – 말씀 카드 -->
+<div class="frame-wrap">
+  <div class="frame-label">계단 <b>09-3 · 오른 계단 누르기</b></div>
+  <div class="phone">
+    <div class="status"><span>9:41</span><span class="dots">●●● ▮</span></div>
+    <div class="body" style="padding-bottom:0">
+      <div class="head-row">
+        <h1 class="title">내 계단</h1>
+        <span class="chip">🔥 4일 연속</span>
+      </div>
+      <div class="card goal">
+        <p class="goal-k">쉬는 참까지</p>
+        <p class="goal-n">1<small>계단 남았어요</small></p>
+        <div class="flight" data-done="9" aria-hidden="true"></div>
+        <p class="goal-sub">지금 <b>9계단</b> · 이대로 오르면 <b>내년 7월쯤</b> 꼭대기</p>
+      </div>
+      <div class="stairs-wrap scroll" data-stairs="9" data-pick="7"><div class="stairs"></div></div>
+    </div>
+    <nav class="tabbar" data-tab="2"></nav>
+    <div class="scrim"></div>
+    <div class="sheet" role="dialog" aria-label="7번째 계단 말씀">
+      <div class="grab"></div>
+      <div class="sheet-head">
+        <p class="eyebrow">7번째 계단 · 10월 6일에 외웠어요</p>
+        <div class="sheet-tools">
+          <button class="icon-btn" aria-label="이 말씀 보내기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 8 5-5 5 5"/><path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></svg></button>
+          <button class="icon-btn" aria-label="닫기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+        </div>
+      </div>
+      <h2 class="ref">로마서 8:39</h2>
+      <p class="verse">높음이나 깊음이나 다른 어떤 피조물이라도, 우리를 우리 주 그리스도 예수님 안에 있는 하나님의 사랑에서 끊을 수 없을 것입니다.</p>
+      <div class="two">
+        <button class="btn primary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>들어 보기</button>
+        <button class="btn secondary">다시 외워 보기</button>
+      </div>
+    </div>
+  </div>
+  <ul class="notes">
+    <li>오른 계단을 누르면 화면을 옮기지 않고 아래에서 말씀 카드가 올라옵니다. 닫으면 보던 계단 그대로입니다.</li>
+    <li>카드 위쪽에 외운 날을 적습니다. "언제 이걸 외웠지?"를 아이가 스스로 돌아봅니다. 보내기는 위쪽 작은 단추로 둡니다.</li>
+    <li>"다시 외워 보기"는 연습 화면 1단계로 갑니다. 외운 기록은 그대로 둡니다.</li>
+    <li>바깥(어두운 곳)을 누르거나 아래로 끌어내리거나 뒤로 가기를 하면 닫힙니다. 열린 동안 포커스는 카드 안에 머뭅니다.</li>
+  </ul>
+</div>
+
+<!-- 2안 C+D: 무지개 원 + 지금 보석 카드 -->
+<div class="frame-wrap">
+  <div class="frame-label">내 말씀 <b>C+D-1 · 처음 열었을 때</b></div>
+  <div class="phone" data-cd="23"></div>
+  <ul class="notes">
+    <li>위는 말씀 주머니, 아래는 열두 보석 원과 보석 카드입니다. 이 탭을 열면 "열두 보석"이 화면 위에 오도록 내려 둡니다.</li>
+    <li>원: 맨 위 첫째(벽옥)부터 시계 방향으로 돕니다. 외울수록 안쪽에서 바깥으로 색이 찹니다. 주황 테두리 조각이 지금 외우는 보석입니다.</li>
+    <li>카드: 처음에는 지금 보석(비취옥)을 보여 줍니다. 외운 구절은 ✓와 장절, 다음 구절은 [외우러 가기], 그 뒤 두 구절까지만 보이고 나머지는 "○구절 더"로 접습니다.</li>
+    <li>조각 한 개는 가운데 둘레 기준으로 약 48×58px이라 아이 손가락으로 누를 수 있습니다.</li>
+  </ul>
+</div>
+
+<div class="frame-wrap">
+  <div class="frame-label">내 말씀 <b>C+D-2 · 다른 보석을 눌렀을 때</b></div>
+  <div class="phone" data-cd="23" data-sel="2"></div>
+  <ul class="notes">
+    <li>원의 조각을 누르면 아래 카드가 그 보석으로 바뀝니다. 고른 조각은 검은 테두리, 지금 보석은 주황 테두리 그대로입니다.</li>
+    <li>다 외운 보석은 구절이 모두 ✓로 나오고, 누르면 09-3의 말씀 카드가 열립니다. 지난 구절을 다시 듣고 외우는 곳이 됩니다.</li>
+    <li>카드 머리의 "지금 보석으로"를 누르면 지금 외우는 보석으로 돌아갑니다.</li>
+  </ul>
+</div>
+
+<div class="frame-wrap">
+  <div class="frame-label">외웠어요! <b>C+D-3 · 보석 하나가 다 빛날 때</b></div>
+  <div class="phone celebrate" data-gemdone="2"></div>
+  <ul class="notes">
+    <li>묶음의 마지막 구절을 외우면, 지금의 "쉬는 참에 도착했어요!" 대신 이 화면으로 한 번 더 축하합니다.</li>
+    <li>보석은 비어 있다가 아래부터 차올라 반짝이는 움직임(0.8초)으로 보여 줍니다. 동작 줄이기 설정이면 바로 다 찬 모습만 보여 줍니다.</li>
+    <li>아래 단추는 "한 구절 더 외우기"입니다.</li>
+  </ul>
+</div>
+
+<!-- 2안-2. 말씀 주머니 열기 -->
+<div class="frame-wrap">
+  <div class="frame-label">내 말씀 <b>공통 · 주머니 열기(무서울 때)</b></div>
+  <div class="phone">
+    <div class="status"><span>9:41</span><span class="dots">●●● ▮</span></div>
+    <div class="navbar" data-backbar></div>
+    <div class="body scroll" style="display:block;padding-bottom:20px" data-situation="scared" data-done="23"></div>
+    <nav class="tabbar" data-tab="2" data-alt="word"></nav>
+  </div>
+  <ul class="notes">
+    <li>내가 외운 구절만 크게 보여 줍니다. 장절은 전체 이름으로, 본문은 24px 그대로입니다.</li>
+    <li>밤에 혼자 열어도 되도록 구절마다 들어 보기 단추를 둡니다.</li>
+    <li>아직 안 외운 구절은 아래에 자물쇠로 두고, 몇 번째 계단에서 만나는지 알려 줍니다. 누르면 그 구절의 연습 화면으로 갑니다.</li>
+  </ul>
+</div>
+
+<!-- 2안-4. 열두 기초가 모두 빛남 -->
+<div class="frame-wrap">
+  <div class="frame-label">내 말씀 <b>공통 · 100구절을 다 외웠을 때</b></div>
+  <div class="phone found-done">
+    <div class="status"><span>9:41</span><span class="dots">●●● ▮</span></div>
+    <div class="body" style="align-items:center;text-align:center">
+      <div class="spacer"></div>
+      <div class="ring-wrap done-ring" data-ring="100"></div>
+      <p class="eyebrow" style="margin-top:16px;font-size:18px">100번째 구절 · 계 21:2</p>
+      <h2 class="title" style="margin-top:6px">열두 기초 보석이<br>모두 빛나요!</h2>
+      <p class="sub" style="font-size:19px;margin-top:12px;line-height:1.6">100구절을 모두 마음에 담았어요.<br>말씀이 오늘도 나를 새롭게 해요.</p>
+      <div class="spacer"></div>
+      <div class="stack" style="width:100%">
+        <button class="btn primary">처음부터 다시 들어 보기</button>
+        <button class="btn secondary small">내 말씀 보기</button>
+      </div>
+    </div>
+  </div>
+  <ul class="notes">
+    <li>"다 지었어요", "완성" 대신 "모두 빛나요"를 씁니다. 열두 조각이 모두 차고 반짝입니다.</li>
+    <li>100번째 구절이 계 21:2라서, 축하 화면에서 그 구절이 바로 이어집니다. 10번(꼭대기) 화면 대신 씁니다.</li>
+  </ul>
+</div>
+
+<!-- 2안 · 짝 표 -->
+<div class="frame-wrap" style="width:100%;max-width:375px">
+  <div class="frame-label">내 말씀 <b>2안 · 열두 기초와 구절 묶음</b></div>
+  <div class="pair-table" data-found-table></div>
+  <ul class="notes">
+    <li>보석 이름과 순서는 회복역 계 21:19-20 그대로입니다. 색은 보석을 짐작한 것이고, 옛 보석 이름이 오늘의 어느 보석인지는 확실하지 않습니다.</li>
+    <li>묶음은 주제가 끊기지 않게 나눴습니다(6~11구절).</li>
+  </ul>
+</div>
+
+<div class="frame-wrap" style="width:100%;max-width:375px">
+  <div class="frame-label">내 말씀 <b>2안 · 말씀 주머니 짝(초안)</b></div>
+  <div class="pair-table" data-pairs></div>
+  <ul class="notes">
+    <li>100구절에서 고른 초안입니다. 한 구절이 두 상황에 들어가도 됩니다.</li>
   </ul>
 </div>
 
@@ -479,7 +765,7 @@ body {
       <tr><td>빈칸 어절</td><td>높이 44px 이상</td></tr>
       <tr><td>목록 한 줄</td><td>높이 76px</td></tr>
       <tr><td>거르기 · 주제 칩</td><td>48px · 44px</td></tr>
-      <tr><td>계단 한 칸</td><td>92×52px, 아직 못 오른 계단은 누를 수 없음</td></tr>
+      <tr><td>계단 한 칸</td><td>112×52px, 아직 못 오른 계단은 누를 수 없음</td></tr>
     </table>
   </section>
 </div>
@@ -490,9 +776,11 @@ const ICONS = [
   ['구절', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5v-15Z"/><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/><path d="M9 8h7M9 12h5"/></svg>'],
   ['계단', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h5v-5h5v-5h5V6h3"/><path d="M3 21h18"/></svg>'],
 ];
+const TAB_WORD = ['내 말씀', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12l4 6-10 12L2 9l4-6Z"/><path d="M2 9h20M12 21 8 9l4-6 4 6-4 12"/></svg>'];
 document.querySelectorAll('.tabbar').forEach(nav => {
   const cur = +nav.dataset.tab;
-  nav.innerHTML = ICONS.map(([label, svg], i) =>
+  const icons = nav.dataset.alt === 'word' ? [ICONS[0], ICONS[1], TAB_WORD] : ICONS;
+  nav.innerHTML = icons.map(([label, svg], i) =>
     `<button class="tab" ${i === cur ? 'aria-current="page"' : ''}>${svg}${label}</button>`).join('');
 });
 
@@ -646,24 +934,210 @@ fetch('../web/data/verses.json').then(r => r.json()).then(d => {
   document.querySelectorAll('[data-list]').forEach(el => mountList(el, d.verses));
 });
 
-// 계단
-const stairs = document.getElementById('stairs');
-const DONE = 9, AVAIL = 343 - 92;
-let html = '';
-for (let s = 1; s <= 99; s++) {
-  const flight = Math.floor((s - 1) / 10), pos = (s - 1) % 10;
-  const x = Math.round((flight % 2 === 0 ? pos : 9 - pos) * AVAIL / 9);
-  const cls = s <= DONE ? 'done' : s === DONE + 1 ? 'now' : '';
-  const here = s === DONE + 1 ? `<span class="here" style="left:${Math.min(x, AVAIL - 10)}px">지금 여기</span>` : '';
-  html += `<div class="stair"><button class="${cls}" style="left:${x}px" ${s > DONE + 1 ? 'disabled' : ''}>${s <= DONE ? '✓ ' : ''}${s}</button>${here}</div>`;
-  if (s % 10 === 0) html += `<div class="landing ${s <= DONE ? 'reached' : ''}">쉬는 참 · ${s}계단</div>`;
+// 계단: 오른 계단엔 장절, 다음 쉬는 참 위로는 구름
+const REFS = ['롬 1:20','창 1:26','딤후 3:16-17','딤후 3:15','벧전 2:2','골 3:16','롬 8:39','창 28:15','잠 16:9','벧전 5:7'];
+const STEP_W = 112;
+const CLOUD = (cls) => `<svg class="${cls}" viewBox="0 0 343 172" preserveAspectRatio="none" aria-hidden="true" fill="var(--surface)">
+  <circle cx="52" cy="112" r="40"/><circle cx="112" cy="80" r="52"/><circle cx="188" cy="64" r="58"/>
+  <circle cx="258" cy="86" r="48"/><circle cx="302" cy="114" r="36"/><rect x="14" y="104" width="315" height="60" rx="30"/></svg>`;
+document.querySelectorAll('[data-stairs]').forEach(wrap => {
+  const done = +wrap.dataset.stairs, pick = +wrap.dataset.pick || 0;
+  const avail = wrap.clientWidth - 32 - STEP_W;
+  const top = (Math.floor(done / 10) + 1) * 10; // 보이는 마지막 계단(다음 쉬는 참)
+  let html = '<p class="ground">출발</p>';
+  for (let s = 1; s <= top; s++) {
+    const flight = Math.floor((s - 1) / 10), pos = (s - 1) % 10;
+    const x = Math.round((flight % 2 === 0 ? pos : 9 - pos) * avail / 9);
+    const cls = s <= done ? 'done' : s === done + 1 ? 'now' : '';
+    const label = s <= done ? REFS[s - 1] || `${s}` : `${s}`;
+    const aria = s <= done ? `${s}번째 계단, ${label}` : s === done + 1 ? `${s}번째 계단, 지금 여기. 오늘의 구절 열기` : `${s}번째 계단, 아직 못 올랐어요`;
+    let here = '';
+    if (s === done + 1) {
+      here = x > avail / 2
+        ? `<span class="here" style="right:${avail - x + STEP_W + 10}px" aria-hidden="true">지금 여기 →</span>`
+        : `<span class="here" style="left:${x + STEP_W + 10}px" aria-hidden="true">← 지금 여기</span>`;
+    }
+    html += `<div class="stair"><button class="${cls}${s === pick ? ' pick' : ''}" style="left:${x}px" aria-label="${aria}" ${cls ? '' : 'disabled'}>${label}</button>${here}</div>`;
+    if (s % 10 === 0) html += `<div class="landing ${s <= done ? 'reached' : ''}">쉬는 참 · ${s}계단</div>`;
+  }
+  html += `<div class="clouds">${CLOUD('c1')}<p class="t">구름 위에 ${100 - top}계단이 더 있어요</p><p class="s">쉬는 참에 닿으면 구름이 걷혀요</p></div>`;
+  html += `<div class="peak">👑 100 · 꼭대기</div>`;
+  const st = wrap.querySelector('.stairs');
+  st.innerHTML = html;
+  requestAnimationFrame(() => {
+    const target = st.querySelector(pick ? '.pick' : '.now');
+    wrap.scrollTop = pick ? target.parentElement.offsetTop - 24 : target.parentElement.offsetTop - wrap.clientHeight * 0.8;
+  });
+});
+document.querySelectorAll('.flight').forEach(el => {
+  const d = +el.dataset.done % 10;
+  el.innerHTML = Array.from({ length: 10 }, (_, i) => `<i class="${i < d ? 'on' : i === d ? 'next' : ''}"></i>`).join('');
+});
+
+// 2안: 내 말씀 — 말씀 주머니 + 보석 성
+const SITUATIONS = [
+  { key: 'scared', e: '😨', label: '무서울 때', ids: [7, 8, 12, 37, 61] },
+  { key: 'worry', e: '😟', label: '걱정될 때', ids: [9, 10, 13, 77, 63] },
+  { key: 'angry', e: '😤', label: '화가 날 때', ids: [52, 49, 50, 41, 42] },
+  { key: 'sorry', e: '😢', label: '잘못했을 때', ids: [19, 79, 29, 81] },
+  { key: 'hard', e: '😮‍💨', label: '힘들 때', ids: [11, 14, 67, 54, 44] },
+  { key: 'glad', e: '😊', label: '기쁠 때', ids: [21, 78, 74, 71] },
+];
+document.querySelectorAll('[data-pocket]').forEach(el => {
+  const done = +el.dataset.pocket;
+  el.innerHTML = SITUATIONS.map(s => {
+    const n = s.ids.filter(id => id <= done).length;
+    return `<button class="${n ? '' : 'none'}" aria-label="${s.label}, 외운 말씀 ${n}개">${n ? `<span class="n">${n}</span>` : ''}<span class="e" aria-hidden="true">${s.e}</span>${s.label}</button>`;
+  }).join('');
+});
+
+// 열두 기초(계 21:19-20, 회복역 이름과 순서). 색은 짐작한 것.
+const FOUNDS = [
+  { no: 1, name: '벽옥', g: '#7FC8B2', from: 1, to: 6, what: '창조와 말씀' },
+  { no: 2, name: '청옥', g: '#2F5FD0', from: 7, to: 14, what: '주님의 돌보심' },
+  { no: 3, name: '옥수', g: '#9FB2C8', from: 15, to: 21, what: '주님을 찾고 사랑함' },
+  { no: 4, name: '비취옥', g: '#1E9E5A', from: 22, to: 32, what: '예수 그리스도와 구원' },
+  { no: 5, name: '홍마노', g: '#A9583E', from: 33, to: 38, what: '하나님의 영과 사람의 영' },
+  { no: 6, name: '홍옥수', g: '#D9412E', from: 39, to: 45, what: '그리스도인의 인성 ①' },
+  { no: 7, name: '귀감람석', g: '#B3BC2E', from: 46, to: 52, what: '그리스도인의 인성 ②' },
+  { no: 8, name: '녹주석', g: '#38B3C6', from: 53, to: 63, what: '영적인 생활' },
+  { no: 9, name: '황옥', g: '#E3A72F', from: 64, to: 71, what: '주님이 거하심, 먹고 마심' },
+  { no: 10, name: '녹옥수', g: '#6FA83A', from: 72, to: 82, what: '이름 부름과 기도' },
+  { no: 11, name: '풍신자석', g: '#E07B39', from: 83, to: 90, what: '섬김, 드림, 세상, 침례' },
+  { no: 12, name: '자수정', g: '#8E5BD9', from: 91, to: 100, what: '집회, 교회, 왕국, 새 예루살렘' },
+];
+// 보석 그림: 아래부터 차오르는 보석(got/n)
+let gemUid = 0;
+function gemSVG(f, got, n, w = 44, extra = '') {
+  const p = got / n, id = 'gc' + (++gemUid), pts = '10,2 30,2 38,12 20,34 2,12';
+  const y = 2 + 32 * (1 - p);
+  return `<svg viewBox="0 0 40 36" width="${w}" height="${Math.round(w * 0.9)}" aria-hidden="true" ${extra}>`
+    + `<defs><clipPath id="${id}"><rect x="0" y="${y}" width="40" height="40"/></clipPath></defs>`
+    + `<polygon points="${pts}" fill="var(--surface-2)" stroke="${p > 0 ? f.g : 'var(--line-strong)'}" stroke-width="1.6" stroke-linejoin="round" ${p > 0 ? '' : 'stroke-dasharray="3 2"'}/>`
+    + `<polygon points="${pts}" fill="${f.g}" clip-path="url(#${id})"/>`
+    + (p > 0 ? `<path d="M2 12h36M10 2l4 10 6-10 6 10 4-10M14 12l6 22 6-22" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="1" clip-path="url(#${id})"/>` : '')
+    + (p >= 1 ? `<path d="M33 1l1.2 2.8L37 5l-2.8 1.2L33 9l-1.2-2.8L29 5l2.8-1.2Z" fill="#fff"/>` : '')
+    + `</svg>`;
 }
-html += `<div class="summit">100 · 꼭대기</div>`;
-stairs.innerHTML = html;
-const wrap = document.getElementById('stairsWrap');
-requestAnimationFrame(() => {
-  const now = stairs.querySelector('.now');
-  wrap.scrollTop = now.parentElement.offsetTop - wrap.clientHeight + 180;
+const ORD_W = ['첫째', '둘째', '셋째', '넷째', '다섯째', '여섯째', '일곱째', '여덟째', '아홉째', '열째', '열한째', '열두째'];
+const stat = (f, done) => { const n = f.to - f.from + 1, got = Math.max(0, Math.min(done, f.to) - f.from + 1); return { n, got, full: got === n, cur: done + 1 >= f.from && done + 1 <= f.to }; };
+const ALL_REFS = ["롬 1:20", "창 1:26", "딤후 3:16-17", "딤후 3:15", "벧전 2:2", "골 3:16", "롬 8:39", "창 28:15", "잠 16:9", "벧전 5:7", "고전 10:13", "습 3:17", "롬 8:28", "빌 1:6", "전 12:1", "렘 29:13", "히 11:6", "히 12:2", "히 4:16", "신 6:5", "시 73:25", "마 1:21", "요 1:29", "사 53:5", "요 12:24", "요 11:25", "히 9:28", "갈 1:4", "마 26:28", "요 3:16", "롬 10:13", "요 5:24", "요 4:24", "고전 15:45", "고후 3:17", "슥 12:1", "딤후 1:7", "살전 5:23", "엡 6:1-3", "벧전 5:5", "엡 4:2-3", "빌 2:3-4", "딤후 2:21", "골 3:23", "엡 5:16-17", "롬 12:11", "잠 4:18", "딤전 6:11", "마 5:9", "엡 4:29", "갈 6:8", "잠 14:29", "잠 9:10", "고후 4:16", "빌 1:19", "히 12:1", "딤전 4:8", "롬 8:2", "빌 3:13-14", "딤전 6:12", "요 8:12", "마 16:24", "골 3:15", "갈 2:20", "요 15:5", "골 1:27", "빌 4:13", "요 6:63", "요 6:57", "요 4:14", "렘 15:16", "사 55:6", "딤후 2:22", "사 12:3-4", "엡 6:18", "마 7:7", "빌 4:6-7", "살전 5:16-18", "요일 1:9", "마 6:9-10", "마 6:11-12", "마 6:13", "고전 15:58", "행 20:24", "고전 4:2", "말 3:10", "눅 6:38", "요일 2:15", "롬 12:2", "마 28:19", "히 10:25", "행 2:46", "엡 3:9", "벧후 1:4", "요일 3:2", "딤전 3:15", "엡 1:23", "롬 14:17", "골 1:13", "계 21:2"];
+
+// 열두 보석 원: sel = 고른 보석 번호
+function ringSVG(d, sel) {
+  const cx = 170, cy = 165, r0 = 64, r1 = 122, gap = 1.6;
+  const pt = (r, a) => [cx + r * Math.sin(a * Math.PI / 180), cy - r * Math.cos(a * Math.PI / 180)];
+  const sector = (ra, rb, a0, a1) => { const [x0, y0] = pt(ra, a0), [x1, y1] = pt(rb, a0), [x2, y2] = pt(rb, a1), [x3, y3] = pt(ra, a1);
+    return `M${x0.toFixed(1)} ${y0.toFixed(1)}L${x1.toFixed(1)} ${y1.toFixed(1)}A${rb} ${rb} 0 0 1 ${x2.toFixed(1)} ${y2.toFixed(1)}L${x3.toFixed(1)} ${y3.toFixed(1)}A${ra} ${ra} 0 0 0 ${x0.toFixed(1)} ${y0.toFixed(1)}Z`; };
+  let svg = '';
+  FOUNDS.forEach((f, i) => {
+    const s = stat(f, d), a0 = i * 30 + gap, a1 = (i + 1) * 30 - gap;
+    svg += `<g role="button" aria-label="${ORD_W[i]} 보석 ${f.name}, ${s.n}구절 중 ${s.got}구절">`;
+    svg += `<path d="${sector(r0, r1, a0, a1)}" fill="var(--step-todo)"/>`;
+    if (s.got) svg += `<path d="${sector(r0, r0 + (r1 - r0) * s.got / s.n, a0, a1)}" fill="${f.g}"/>`;
+    if (s.full) { const [sx, sy] = pt(r1 - 14, i * 30 + 15); svg += `<path d="M${sx} ${sy - 7}l1.7 4.3 4.3 1.7-4.3 1.7-1.7 4.3-1.7-4.3-4.3-1.7 4.3-1.7Z" fill="#fff" opacity=".9"/>`; }
+    if (f.no === sel && !s.cur) svg += `<path d="${sector(r0, r1, a0, a1)}" fill="none" stroke="var(--text)" stroke-width="3"/>`;
+    if (s.cur) svg += `<path d="${sector(r0, r1, a0, a1)}" fill="none" stroke="var(--accent)" stroke-width="3"/>`;
+    const [lx, ly] = pt(r1 + 20, i * 30 + 15);
+    svg += `<text x="${lx.toFixed(1)}" y="${(ly + 4).toFixed(1)}" text-anchor="middle" font-size="12.5" font-weight="${f.no === sel ? 900 : 800}" fill="${s.got || f.no === sel ? 'var(--text)' : 'var(--text-2)'}">${f.name}</text></g>`;
+  });
+  svg += `<text x="${cx}" y="${cy + 8}" text-anchor="middle" font-size="44" font-weight="900" fill="var(--accent)">${d}</text>`;
+  svg += `<text x="${cx}" y="${cy + 32}" text-anchor="middle" font-size="15" font-weight="800" fill="var(--text-2)">/ 100</text>`;
+  return `<svg viewBox="0 0 340 330" role="group" aria-label="열두 보석, 100구절 중 ${d}구절">${svg}</svg>`;
+}
+
+// 보석 카드: 고른 묶음의 구절
+function gemCard(d, f) {
+  const s = stat(f, d);
+  let rows = '', later = 0;
+  for (let id = f.from; id <= f.to; id++) {
+    if (id <= d) rows += `<button class="vrow done"><span class="dot">✓</span>${ALL_REFS[id - 1]}<span class="chev" aria-hidden="true">›</span></button>`;
+    else if (id === d + 1) rows += `<div class="vrow next"><span class="dot">${id}</span>${ALL_REFS[id - 1]}<button class="go">외우러 가기</button></div>`;
+    else if (later++ < 2) rows += `<div class="vrow todo"><span class="dot"></span>${ALL_REFS[id - 1]}</div>`;
+  }
+  const rest = later - 2;
+  if (rest > 0) rows += `<div class="vmore">${rest}구절 더 있어요</div>`;
+  const back = s.cur ? '' : `<button class="to-now">지금 보석으로</button>`;
+  return `<div class="card now-card" style="--g:${f.g}">`
+    + `<div class="now-top">${gemSVG(f, s.got, s.n, 60)}<div><p>${ORD_W[f.no - 1]} 보석${s.full ? ' · 모두 빛나요' : s.cur ? ' · 지금' : ''}</p><b>${f.name}</b><small>${f.what}</small></div><span class="cnt">${s.got}<small> / ${s.n}</small></span></div>`
+    + rows + back + `</div>`;
+}
+
+document.querySelectorAll('[data-cd]').forEach(ph => {
+  const d = +ph.dataset.cd;
+  const curF = FOUNDS.find(x => stat(x, d).cur) || FOUNDS[11];
+  const selF = ph.dataset.sel ? FOUNDS[+ph.dataset.sel - 1] : curF;
+  ph.innerHTML = `<div class="status"><span>9:41</span><span class="dots">●●● ▮</span></div>
+    <div class="body scroll" style="display:block;padding-bottom:20px">
+      <div class="head-row"><h1 class="title">내 말씀</h1><span class="chip">🔥 4일 연속</span></div>
+      <h2 class="sec-t">이럴 때 꺼내요</h2>
+      <div class="pocket"></div>
+      <h2 class="sec-t gem-t">열두 보석 <small>${d} / 100</small></h2>
+      <div class="ring-wrap">${ringSVG(d, selF.no)}</div>
+      ${gemCard(d, selF)}
+    </div>
+    <nav class="tabbar"></nav>`;
+  ph.querySelector('.tabbar').innerHTML = [ICONS[0], ICONS[1], TAB_WORD].map(([label, svg], i) => `<button class="tab" ${i === 2 ? 'aria-current="page"' : ''}>${svg}${label}</button>`).join('');
+  ph.querySelector('.pocket').innerHTML = SITUATIONS.map(s => { const n = s.ids.filter(id => id <= d).length;
+    return `<button class="${n ? '' : 'none'}" aria-label="${s.label}, 외운 말씀 ${n}개">${n ? `<span class="n">${n}</span>` : ''}<span class="e" aria-hidden="true">${s.e}</span>${s.label}</button>`; }).join('');
+  requestAnimationFrame(() => {
+    const body = ph.querySelector('.body'), t = ph.querySelector('.gem-t');
+    body.scrollTop = t.offsetTop - body.offsetTop - 4;
+  });
+});
+
+// 보석 하나가 다 빛날 때
+document.querySelectorAll('[data-gemdone]').forEach(ph => {
+  const f = FOUNDS[+ph.dataset.gemdone - 1], n = f.to - f.from + 1;
+  ph.innerHTML = `<div class="status"><span>9:41</span><span class="dots">●●● ▮</span></div>
+    <div class="body">
+      <div class="spacer"></div>
+      <div class="gem-burst" style="--g:${f.g}">${gemSVG(f, n, n, 132)}</div>
+      <p class="eyebrow" style="margin-top:24px;font-size:18px">${f.to}번째 구절 · ${ORD_W[f.no - 1]} 보석</p>
+      <h2 class="title" style="margin-top:6px">${f.name}${(f.name.charCodeAt(f.name.length - 1) - 0xAC00) % 28 ? '이' : '가'}<br>모두 빛나요!</h2>
+      <p class="sub" style="font-size:20px;margin-top:14px;line-height:1.6">${f.what} 말씀 ${n}구절을<br>다 마음에 담았어요.</p>
+      <div class="mini-ring">${ringSVG(f.to, f.no)}</div>
+      <div class="spacer"></div>
+      <div class="stack" style="width:100%">
+        <button class="btn primary">오늘은 여기까지</button>
+        <button class="btn secondary small">한 구절 더 외우기</button>
+      </div>
+    </div>`;
+});
+
+// 100구절을 다 외웠을 때: 원 전체
+document.querySelectorAll('[data-ring]').forEach(el => { el.innerHTML = ringSVG(+el.dataset.ring, 0); });
+
+const ORD = ['첫째', '둘째', '셋째', '넷째', '다섯째', '여섯째', '일곱째', '여덟째', '아홉째', '열째', '열한째', '열두째'];
+document.querySelectorAll('[data-founds]').forEach(el => {
+  const done = +el.dataset.founds;
+  el.innerHTML = FOUNDS.map(f => {
+    const n = f.to - f.from + 1, got = Math.max(0, Math.min(done, f.to) - f.from + 1), lit = got === n;
+    let facets = '';
+    for (let id = f.from; id <= f.to; id++) facets += `<span class="facet ${id <= done ? 'on' : id === done + 1 ? 'next' : ''}"></span>`;
+    return `<div class="frow ${lit ? 'lit' : ''}" style="--g:${f.g}" role="img" aria-label="${ORD[f.no - 1]} 기초 ${f.name}, ${n}구절 중 ${got}구절"><span class="fn">${f.name}${lit ? ' ✓' : ''}</span><span class="facets">${facets}</span></div>`;
+  }).join('');
+});
+document.querySelectorAll('[data-found-table]').forEach(el => {
+  el.innerHTML = FOUNDS.map(f => `<div><b><i class="sw" style="background:${f.g}"></i>${f.no}. ${f.name} · ${f.from}–${f.to}번</b>${f.what}</div>`).join('');
+});
+document.querySelectorAll('[data-backbar]').forEach(el => {
+  el.innerHTML = `<button class="icon-btn" aria-label="뒤로">${ICON_BACK}</button><h2>😨 무서울 때</h2><span></span>`;
+});
+
+fetch('../web/data/verses.json').then(r => r.json()).then(d => {
+  const byId = Object.fromEntries(d.verses.map(v => [v.id, v]));
+  document.querySelectorAll('[data-situation]').forEach(el => {
+    const s = SITUATIONS.find(x => x.key === el.dataset.situation), done = +el.dataset.done;
+    const mine = s.ids.filter(id => id <= done).sort((a, b) => a - b), later = s.ids.filter(id => id > done).sort((a, b) => a - b);
+    el.innerHTML = `<p class="sub" style="margin:4px 4px 0">내가 외운 말씀 ${mine.length}개예요. 소리 내어 말해 봐요.</p>`
+      + mine.map(id => `<article class="card pv"><div class="pv-head"><h3 class="ref">${byId[id].refLong}</h3><button class="icon-btn" aria-label="들어 보기">${ICON_SPEAK}</button></div><p class="verse">${byId[id].text.replace(/\n/g, '<br>')}</p></article>`).join('')
+      + `<h3 class="sec-t">더 외우면 생겨요</h3>`
+      + later.map(id => `<button class="locked"><span aria-hidden="true">🔒</span><span><b>${byId[id].ref}</b> · ${id}번째 계단에서 만나요</span></button>`).join('');
+  });
+  document.querySelectorAll('[data-pairs]').forEach(el => {
+    el.innerHTML = SITUATIONS.map(s => `<div><b>${s.e} ${s.label}</b>${s.ids.map(id => byId[id].ref).join(', ')}</div>`).join('');
+  });
 });
 </script>
 </body>

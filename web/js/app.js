@@ -12,7 +12,7 @@ const tabbar = document.getElementById('tabbar');
 const TABS = [
   ['today', '#/', '오늘', 'today'],
   ['list', '#/list', '구절', 'list'],
-  ['stairs', '#/stairs', '계단', 'stairs'],
+  ['word', '#/word', '내 말씀', 'gem'],
   ['settings', '#/settings', '설정', 'gear'],
 ];
 
@@ -74,7 +74,9 @@ function parse(hash) {
   let m;
   if (p === '/') return { name: 'today', tab: true, key: 'today' };
   if (p === '/list') return { name: 'list', tab: true, key: 'list' };
-  if (p === '/stairs') return { name: 'stairs', tab: true, key: 'stairs' };
+  if (p === '/word') return { name: 'word', tab: true, key: 'word' };
+  if (p === '/stairs') return { name: 'word', tab: true, key: 'word', moved: '#/word' }; // 옛 "내 계단" 주소
+  if ((m = p.match(/^\/pocket\/([a-z]+)$/))) return { name: 'pocket', param: m[1], key: 'pocket' };
   if (p === '/settings') return { name: 'settings', tab: true, key: 'settings', query };
   if (p === '/welcome') return { name: 'welcome', key: 'welcome' };
   if ((m = p.match(/^\/verse\/(\d{1,3})$/))) return { name: 'verse', param: Number(m[1]), key: 'verse' };
@@ -98,6 +100,10 @@ function render({ keepScroll = false, first = false } = {}) {
   if (!P.welcomed() && r.name !== 'welcome' && r.name !== 'settings') {
     if (r.name === 'verse') app.afterWelcome = location.hash;
     app.go('#/welcome', { replace: true });
+    return;
+  }
+  if (r.moved) {
+    app.go(r.moved, { replace: true });
     return;
   }
   const prev = app.current;

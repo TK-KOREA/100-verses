@@ -259,18 +259,81 @@ button:disabled { cursor: default; }
 .empty .sub { margin-top: 8px; }
 .empty .btn { margin-top: 24px; }
 
-/* ── 내 계단 ───────────────── */
+/* ── 내 말씀: 말씀 주머니 + 열두 보석 ───────────────── */
 .head-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.stairs-head {
-  position: sticky; top: 0; z-index: 5; background: var(--bg);
-  margin: calc(-1 * var(--safe-t) - 20px) -16px 0; padding: calc(var(--safe-t) + 16px) 16px 8px;
+.sec-t { display: flex; justify-content: space-between; align-items: baseline; font-size: 18px; font-weight: 800; margin: 24px 4px 10px; }
+.sec-t small { font-size: 15px; font-weight: 700; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.pocket { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.pocket button {
+  position: relative; min-height: 92px; border-radius: 18px; border: 1px solid var(--line); background: var(--surface);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 10px 4px;
+  font-size: 16px; font-weight: 800; line-height: 1.25;
 }
-.head-count { display: none; }
-.stairs-head.show-count .head-count {
-  display: inline-block; margin-left: 10px; padding: 2px 10px; border-radius: 14px; vertical-align: 5px;
-  background: var(--accent-soft); color: var(--accent-ink); font-size: 16px; font-weight: 800; letter-spacing: 0;
-  font-variant-numeric: tabular-nums;
+.pocket .e { font-size: 30px; line-height: 1; }
+.pocket .n {
+  position: absolute; top: 6px; right: 6px; min-width: 24px; height: 24px; padding: 0 7px; border-radius: 12px;
+  background: var(--accent); color: var(--accent-on); font-size: 14px; font-weight: 800; display: flex; align-items: center; justify-content: center;
 }
+.pocket button.none { background: var(--surface-2); border-color: transparent; color: var(--text-2); }
+.pocket button.none .e { filter: grayscale(1); opacity: .45; }
+.ring-box { max-width: 380px; margin: 0 auto; }
+.ring-box svg { display: block; width: 100%; height: auto; }
+.ring-part { cursor: pointer; outline: none; }
+.ring-part:focus-visible path:first-child { stroke: var(--accent); stroke-width: 4; }
+.ring-box.mini { width: 140px; margin-top: 18px; }
+.ring-box.all { max-width: 300px; }
+.gem-card { margin-top: 4px; padding: 18px 16px 6px; }
+.gem-top { display: grid; grid-template-columns: 60px 1fr auto; gap: 12px; align-items: center; margin-bottom: 12px; outline: none; }
+.gem-ord { font-size: 14px; font-weight: 800; color: var(--accent-ink); }
+.gem-name { font-size: 22px; font-weight: 900; line-height: 1.3; }
+.gem-what { font-size: 15px; font-weight: 600; color: var(--text-2); }
+.gem-cnt { font-size: 22px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.gem-cnt small { font-size: 15px; color: var(--text-2); }
+.vrow {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-height: 52px; padding: 0;
+  border: 0; border-top: 1px solid var(--line); background: none; text-align: left;
+  font-size: calc(18px * var(--fs)); font-weight: 700;
+}
+.vrow .dot { width: 26px; height: 26px; border-radius: 13px; flex: none; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 900; }
+.vrow.done .dot { background: var(--g); color: #fff; }
+.vrow.next .dot { box-shadow: inset 0 0 0 2.5px var(--accent); color: var(--accent-ink); }
+.vrow.todo { color: var(--text-2); font-weight: 600; }
+.vrow.todo .dot { background: var(--step-todo); }
+.vrow .vref { flex: 1; min-width: 0; }
+.vrow .chev { font-size: 20px; }
+.vrow .go {
+  flex: none; min-height: 44px; padding: 0 14px; border-radius: 14px; border: 0;
+  background: var(--accent); color: var(--accent-on); font-size: 16px; font-weight: 800;
+}
+.vmore, .to-now {
+  width: 100%; min-height: 48px; border: 0; border-top: 1px solid var(--line); background: none;
+  font-size: 17px; font-weight: 800;
+}
+.vmore { color: var(--text-2); }
+.to-now { color: var(--accent-ink); }
+.gem-burst { position: relative; display: flex; justify-content: center; }
+.gem-burst::before {
+  content: ""; position: absolute; inset: -40px;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--g) 35%, transparent), transparent);
+}
+.gem-burst svg { position: relative; }
+/* 보석이 아래부터 차오르고 반짝인다. 동작 줄이기면 아래 규칙이 꺼 준다. */
+.gem-fill { animation: gem-fill .8s ease-out both; }
+@keyframes gem-fill { from { clip-path: inset(100% 0 0 0); } to { clip-path: inset(0); } }
+.gem-spark { animation: gem-spark .4s .7s ease-out both; transform-origin: 33px 5px; }
+@keyframes gem-spark { from { opacity: 0; transform: scale(.2); } to { opacity: 1; transform: none; } }
+.pocket-page .sub { margin: 0 4px; }
+.pv { margin-top: 12px; padding: 18px 18px 20px; }
+.pv-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pv-head .ref { font-size: calc(22px * var(--fs)); margin: 0; }
+.pv .verse { margin-top: 8px; }
+.locked {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-height: 56px; padding: 0 16px; border: 0; border-radius: 16px;
+  background: var(--surface-2); text-align: left; font-size: 17px; font-weight: 600; color: var(--text-2);
+}
+.locked + .locked { margin-top: 8px; }
+.locked b { color: var(--text); font-weight: 800; }
+.locked .chev { margin-left: auto; }
 
 /* 홈 화면 추가 안내(브라우저로 열었을 때만): 한 줄 */
 .install-hint {
@@ -292,44 +355,6 @@ button:disabled { cursor: default; }
   display: inline-flex; align-items: center; gap: 6px; font-size: 17px; font-weight: 700; text-decoration: none; color: var(--text);
 }
 .text-btn svg { width: 22px; height: 22px; }
-.summary { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 8px; }
-.summary .count { font-size: 56px; font-weight: 900; line-height: 1; color: var(--accent); letter-spacing: -0.03em; white-space: nowrap; }
-.summary .count small { font-size: 22px; color: var(--text-2); font-weight: 800; letter-spacing: 0; }
-.bar { height: 12px; border-radius: 6px; background: var(--step-todo); margin-top: 14px; overflow: hidden; }
-.bar i { display: block; height: 100%; background: var(--accent); border-radius: 6px; }
-.code-line {
-  display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; margin-top: 12px;
-  padding-top: 8px; border-top: 1px solid var(--line); font-size: 16px; color: var(--text-2); text-decoration: none;
-}
-.code-line b { color: var(--accent-ink); font-size: 18px; }
-.stairs { display: flex; flex-direction: column-reverse; padding: 48px 0 8px; }
-.stair { height: 52px; position: relative; }
-.stair button {
-  position: absolute; top: 0; height: 52px; width: 92px; border: 0;
-  border-radius: 12px 12px 4px 4px; font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums;
-  background: var(--step-todo); color: var(--text-2);
-  box-shadow: inset 0 -6px 0 rgba(0, 0, 0, .08);
-}
-.stair button.done { background: var(--accent); color: var(--accent-on); }
-.stair button.now { background: var(--surface); color: var(--accent-ink); box-shadow: inset 0 0 0 3px var(--accent); }
-.stair .here { z-index: 3; }
-.stair .here {
-  position: absolute; top: -34px; background: var(--text); color: var(--bg); font-size: 14px; font-weight: 800;
-  padding: 4px 10px; border-radius: 10px; white-space: nowrap; pointer-events: none;
-}
-.landing {
-  height: 56px; margin: 4px 0; border-radius: 14px; background: var(--surface); border: 1px dashed var(--line-strong);
-  display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 16px; font-weight: 800; color: var(--text-2);
-}
-.landing.reached { border-style: solid; color: var(--accent-ink); background: var(--accent-soft); border-color: transparent; }
-.summit-step {
-  width: 100%; min-height: 72px; border-radius: 18px; background: var(--surface); border: 2px dashed var(--line-strong);
-  display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 18px; font-weight: 800; color: var(--text-2);
-  margin-bottom: 8px;
-}
-.summit-step.now { border: 3px solid var(--accent); color: var(--accent-ink); }
-.summit-step.done { background: var(--accent); border-color: var(--accent); color: var(--accent-on); }
-.ground { text-align: center; color: var(--text-2); font-size: 16px; font-weight: 700; padding: 12px 0 0; border-top: 3px solid var(--line); }
 
 /* ── 설정 · 처음 ───────────────── */
 .section { margin-top: 24px; }

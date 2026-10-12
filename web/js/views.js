@@ -1,9 +1,10 @@
-// 화면들: 오늘, 연습(+축하), 모든 구절, 내 계단, 설정, 처음.
+// 화면들: 오늘, 연습(+축하), 모든 구절, 내 말씀(+말씀 주머니), 설정, 처음.
 // 각 화면은 {el, title, after?, update?, cleanup?}를 돌려준다.
 import { h, icon, art, toast } from './ui.js';
 import * as P from './progress.js';
 import * as S from './speech.js';
 import * as L from './listen.js';
+import * as G from './gems.js';
 
 const STEP_NAMES = ['읽기', '첫 글자', '빈칸', '혼자'];
 const HINTS = [
@@ -12,7 +13,6 @@ const HINTS = [
   '가려진 곳을 누르면 보여요',
   '안 보고 말해 봐요. 막히면 눌러서 살짝 봐요',
 ];
-const STEP_COUNT = 100;
 
 const FONT_LEVELS = [[1, '보통'], [2, '크게'], [3, '아주 크게']];
 export const fontLevel = () => {
@@ -177,14 +177,13 @@ export function today(app) {
   if (nextId == null) {
     root.append(
       h('h1', { class: 'sr-only', tabindex: '-1' }, '오늘'),
-      h('div', { style: 'text-align:center;margin-top:32px' },
-        art('crown'),
-        h('p', { class: 'eyebrow', style: 'margin-top:24px;font-size:18px' }, '100번째 계단'),
-        h('h2', { class: 'title', style: 'margin-top:6px' }, '꼭대기에 올라왔어요!'),
+      h('div', { style: 'text-align:center;margin-top:16px' },
+        h('div', { class: 'ring-box all' }, G.gemRing()),
+        h('h2', { class: 'title', style: 'margin-top:8px' }, '열두 보석이 모두 빛나요!'),
         h('p', { class: 'sub', style: 'margin-top:12px;font-size:20px' }, '100구절을 모두 마음에 담았어요.'),
       ),
       h('div', { class: 'actions stack' },
-        h('button', { type: 'button', class: 'btn primary', onclick: () => app.go('#/stairs') }, '내 계단 보기'),
+        h('button', { type: 'button', class: 'btn primary', onclick: () => app.go('#/word') }, '내 말씀 보기'),
         h('button', { type: 'button', class: 'btn secondary small', onclick: () => app.go('#/list') }, '모든 구절 다시 보기'),
       ),
     );
@@ -221,7 +220,7 @@ export function today(app) {
       })),
       lastBlock(app),
       h('div', { class: 'actions' },
-        h('button', { type: 'button', class: 'btn secondary small', onclick: () => app.go('#/verse/' + nextId) }, '한 계단 더 오르기'),
+        h('button', { type: 'button', class: 'btn secondary small', onclick: () => app.go('#/verse/' + nextId) }, '한 구절 더 외우기'),
       ),
     ].filter(Boolean));
     return { el: root, title: '오늘' };
@@ -522,26 +521,46 @@ function celebrate(app, v) {
     toast('취소했어요. 다시 외워 봐요');
   };
 
+  const f = G.foundOf(v.id);
+  const gem = G.gemStat(f);
+  const more = () => app.go('#/verse/' + next, { replace: true });
   if (all) {
-    title.textContent = '꼭대기에 올라왔어요!';
+    title.textContent = '열두 보석이 모두 빛나요!';
     inner.append(
       h('div', { class: 'grow' }),
-      art('crown'),
-      h('p', { class: 'eyebrow', style: 'margin-top:28px;font-size:18px' }, '100번째 계단'),
+      h('div', { class: 'ring-box all pop' }, G.gemRing()),
+      h('p', { class: 'eyebrow', style: 'margin-top:12px;font-size:18px' }, '100번째 구절'),
       title,
       h('p', { class: 'sub', style: 'font-size:20px;margin-top:16px;line-height:1.6' }, '100구절을 모두 마음에 담았어요.', h('br'), '정말 잘했어요.'),
       h('div', { class: 'grow' }),
       h('div', { class: 'stack' },
-        h('button', { type: 'button', class: 'btn primary', onclick: () => app.go('#/stairs') }, '내 계단 보기'),
+        h('button', { type: 'button', class: 'btn primary', onclick: () => app.go('#/word') }, '내 말씀 보기'),
         h('button', { type: 'button', class: 'btn secondary small', onclick: () => app.go('#/') }, '처음 화면으로'),
       ),
       h('button', { type: 'button', class: 'link', style: 'margin-top:8px', onclick: undo }, '잘못 눌렀어요'),
     );
+  } else if (gem.full) {
+    // 이 구절로 보석 하나(묶음)를 다 외웠다.
+    title.textContent = `${f.name}${G.iGa(f.name)} 모두 빛나요!`;
+    const lines = [`${f.what} 말씀 ${gem.n}구절을`, '다 마음에 담았어요.'];
+    if (streak >= 2) lines.push(`🔥 ${streak}일 연속이에요`);
+    inner.append(
+      h('div', { class: 'grow' }),
+      h('div', { class: 'gem-burst', style: `--g:${f.color}` }, G.gemArt(f, 1, 132, { animate: true })),
+      h('p', { class: 'eyebrow', style: 'margin-top:24px;font-size:18px' }, `${G.ORD[f.no - 1]} 보석`),
+      title,
+      h('p', { class: 'sub', style: 'font-size:20px;margin-top:12px;line-height:1.6' }, lines.flatMap((l, i) => (i ? [h('br'), l] : [l]))),
+      h('div', { class: 'ring-box mini' }, G.gemRing({ cur: next != null ? G.foundOf(next).no : 0, sel: f.no })),
+      h('div', { class: 'grow' }),
+      h('div', { class: 'stack' },
+        h('button', { type: 'button', class: 'btn primary', onclick: () => app.go('#/') }, '오늘은 여기까지'),
+        h('button', { type: 'button', class: 'btn secondary small', onclick: more }, '한 구절 더 외우기'),
+      ),
+      h('button', { type: 'button', class: 'link', style: 'margin-top:8px', onclick: undo }, '잘못 눌렀어요'),
+    );
   } else {
-    const landing = n % 10 === 0;
-    title.textContent = landing ? '쉬는 참에 도착했어요!' : '계단 올라왔어요!';
-    const lines = [`${v.refLong}${eulReul(v.refLong)} 외웠어요`];
-    if (landing) lines.unshift(`벌써 ${n}계단이에요.`);
+    title.textContent = '계단 올라왔어요!';
+    const lines = [`${v.refLong}${eulReul(v.refLong)} 외웠어요`, `${f.name} 보석까지 ${gem.n - gem.got}구절 남았어요`];
     if (streak >= 2) lines.push(`🔥 ${streak}일 연속이에요`);
     inner.append(
       h('div', { class: 'grow' }),
@@ -553,7 +572,7 @@ function celebrate(app, v) {
       h('div', { class: 'grow' }),
       h('div', { class: 'stack' },
         h('button', { type: 'button', class: 'btn primary', onclick: () => app.go('#/') }, '오늘은 여기까지'),
-        h('button', { type: 'button', class: 'btn secondary small', onclick: () => app.go('#/verse/' + next, { replace: true }) }, '한 계단 더 오르기'),
+        h('button', { type: 'button', class: 'btn secondary small', onclick: more }, '한 구절 더 외우기'),
       ),
       h('button', { type: 'button', class: 'link', style: 'margin-top:8px', onclick: undo }, '잘못 눌렀어요'),
     );
@@ -739,80 +758,124 @@ export function list(app) {
   };
 }
 
-// ---------- 내 계단 ----------
+// ---------- 내 말씀: 말씀 주머니 + 열두 보석 ----------
 
-export function stairs(app) {
-  const done = P.doneList();
-  const n = done.length;
-  const streak = P.streak();
+export function word(app) {
   const nextId = P.nextVerseId(app.verses);
+  const curF = nextId != null ? G.foundOf(nextId) : null;
+  let sel = (curF || G.FOUNDS[G.FOUNDS.length - 1]).no;
+  let showAll = false;
+  const streak = P.streak();
 
-  const wrap = h('div', { class: 'stairs' });
-  wrap.append(h('p', { class: 'ground' }, '출발'));
-  for (let s = 1; s < STEP_COUNT; s++) {
-    const flight = Math.floor((s - 1) / 10);
-    const pos = (s - 1) % 10;
-    const x = flight % 2 === 0 ? pos : 9 - pos;
-    const left = `calc((100% - 92px) * ${x} / 9)`;
-    let btn;
-    if (s <= n) {
-      const v = app.byId[done[s - 1].id];
-      btn = h('button', { type: 'button', class: 'done', style: `left:${left}`, 'aria-label': `${s}번째 계단, ${v.ref}`, onclick: () => app.go('#/verse/' + v.id) }, `✓ ${s}`);
-    } else if (s === n + 1 && nextId != null) {
-      btn = h('button', { type: 'button', class: 'now', style: `left:${left}`, 'aria-label': `${s}번째 계단, 지금 여기. 오늘의 구절 열기`, onclick: () => app.go('#/verse/' + nextId) }, String(s));
-    } else {
-      btn = h('button', { type: 'button', style: `left:${left}`, disabled: true, 'aria-label': `${s}번째 계단, 아직 못 올랐어요` }, String(s));
+  const ringBox = h('div', { class: 'ring-box' });
+  const card = h('div', { class: 'card gem-card' });
+
+  const pick = (no) => {
+    if (no === sel) return;
+    sel = no;
+    showAll = false;
+    paint();
+    card.querySelector('.gem-top')?.focus({ preventScroll: true });
+  };
+
+  const vrow = (v) => {
+    if (P.isDone(v.id)) {
+      return h('button', { type: 'button', class: 'vrow done', onclick: () => app.go('#/verse/' + v.id) },
+        h('span', { class: 'dot', 'aria-hidden': 'true' }, '✓'), h('span', { class: 'vref' }, v.refLong),
+        h('span', { class: 'chev', 'aria-hidden': 'true' }, '›'));
     }
-    const step = h('div', { class: 'stair' }, btn);
-    if (s === n + 1) step.append(h('span', { class: 'here', style: `left:min(${left}, calc(100% - 80px))`, 'aria-hidden': 'true' }, '지금 여기'));
-    wrap.append(step);
-    if (s % 10 === 0) wrap.append(h('div', { class: 'landing' + (s <= n ? ' reached' : '') }, `쉬는 참 · ${s}계단`));
+    if (v.id === nextId) {
+      return h('div', { class: 'vrow next' },
+        h('span', { class: 'dot', 'aria-hidden': 'true' }, String(v.id)), h('span', { class: 'vref' }, v.refLong),
+        h('button', { type: 'button', class: 'go', onclick: () => app.go('#/verse/' + v.id) }, '외우러 가기'));
+    }
+    return h('button', { type: 'button', class: 'vrow todo', onclick: () => app.go('#/verse/' + v.id) },
+      h('span', { class: 'dot', 'aria-hidden': 'true' }), h('span', { class: 'vref' }, v.refLong));
+  };
+
+  function paint() {
+    const f = G.FOUNDS[sel - 1];
+    const st = G.gemStat(f);
+    const isCur = curF && f.no === curF.no;
+    ringBox.replaceChildren(G.gemRing({ cur: curF ? curF.no : 0, sel, onPick: pick }));
+
+    // 외운 구절은 다 보이고, 안 외운 구절은 셋까지만(다음 구절 포함) 보인 뒤 접는다.
+    const vs = G.foundIds(f).map((id) => app.byId[id]);
+    let todoShown = 0;
+    const rows = [];
+    for (const v of vs) {
+      if (!P.isDone(v.id) && !showAll && todoShown++ >= 3) continue;
+      rows.push(vrow(v));
+    }
+    const hidden = vs.length - rows.length;
+    const tag = st.full ? ' · 모두 빛나요' : isCur ? ' · 지금' : '';
+    card.style.setProperty('--g', f.color);
+    card.replaceChildren(...[
+      h('div', { class: 'gem-top', tabindex: '-1' },
+        G.gemArt(f, st.got / st.n, 60),
+        h('div', null,
+          h('p', { class: 'gem-ord' }, `${G.ORD[f.no - 1]} 보석${tag}`),
+          h('h3', { class: 'gem-name' }, f.name),
+          h('p', { class: 'gem-what' }, f.what)),
+        h('p', { class: 'gem-cnt', 'aria-label': `${st.n}구절 중 ${st.got}구절` }, String(st.got), h('small', null, ` / ${st.n}`))),
+      ...rows,
+      hidden > 0 ? h('button', { type: 'button', class: 'vmore', onclick: () => { showAll = true; paint(); } }, `${hidden}구절 더 보기`) : null,
+      curF && !isCur ? h('button', { type: 'button', class: 'to-now', onclick: () => pick(curF.no) }, '지금 보석으로') : null,
+    ].filter(Boolean));
   }
-  const summitCls = n >= STEP_COUNT ? ' done' : n === STEP_COUNT - 1 ? ' now' : '';
-  wrap.append(h('button', {
-    type: 'button',
-    class: 'summit-step' + summitCls,
-    disabled: n < STEP_COUNT - 1,
-    'aria-label': n >= STEP_COUNT ? '100번째 계단, 꼭대기에 올랐어요' : '100번째 계단, 꼭대기',
-    onclick: () => app.go(n >= STEP_COUNT ? '#/' : '#/verse/' + nextId),
-  }, n >= STEP_COUNT ? '👑 100 · 꼭대기' : '100 · 꼭대기'));
+  paint();
 
-  const root = h('div', null,
-    // 계단 중간으로 스크롤해도 몇 계단인지 보이게 제목 줄을 위에 붙인다.
-    h('div', { class: 'head-row stairs-head' },
-      h('h1', { class: 'title', tabindex: '-1' }, '내 계단', h('span', { class: 'head-count' }, `${n} / ${STEP_COUNT}`)),
-    ),
-    h('div', { class: 'card stairs-card', style: 'margin-top:4px;padding:20px' },
-      h('div', { class: 'summary' },
-        h('p', { class: 'count' }, String(n), h('small', null, ` / ${STEP_COUNT}계단`)),
-        streak >= 2 ? h('span', { class: 'chip' }, `🔥 ${streak}일 연속`) : h('span'),
-      ),
-      h('div', { class: 'bar', role: 'progressbar', 'aria-label': '오른 계단', 'aria-valuemin': '0', 'aria-valuemax': String(STEP_COUNT), 'aria-valuenow': String(n) },
-        h('i', { style: `width:${n}%` })),
-      P.code() ? h('a', { class: 'code-line', href: '#/settings' }, h('span', null, '내 계단 코드'), h('b', null, P.code())) : null,
-    ),
-    wrap,
+  const gemHead = h('h2', { class: 'sec-t' }, '열두 보석', h('small', null, `${P.doneCount()} / 100`));
+  const root = h('div', { class: 'word' },
+    h('div', { class: 'head-row' },
+      h('h1', { class: 'title', tabindex: '-1' }, '내 말씀'),
+      streak >= 2 ? h('span', { class: 'chip' }, `🔥 ${streak}일 연속`) : null),
+    h('h2', { class: 'sec-t' }, '이럴 때 꺼내요'),
+    G.pocketGrid(app),
+    gemHead,
+    ringBox,
+    card,
   );
-
-  // 머리줄 숫자는 아래 카드(같은 숫자를 크게 보여 줌)가 화면 밖으로 나갔을 때만 보인다.
-  const headRow = root.querySelector('.stairs-head');
-  const io = 'IntersectionObserver' in window
-    ? new IntersectionObserver(([e]) => headRow.classList.toggle('show-count', !e.isIntersecting), { rootMargin: '-72px 0px 0px 0px' })
-    : null;
-  if (io) io.observe(root.querySelector('.stairs-card'));
-  else headRow.classList.add('show-count');
 
   return {
     el: root,
-    title: '내 계단',
-    cleanup: () => io && io.disconnect(),
+    title: '내 말씀',
+    // 처음 열면 열두 보석이 화면 위에 오게 내려 둔다. 위로 올리면 말씀 주머니가 있다.
     after: (restored) => {
       if (restored) return;
-      const target = wrap.querySelector('.now') || wrap.querySelector('.summit-step.done') || wrap.querySelector('.ground');
-      const y = target.getBoundingClientRect().top + window.scrollY - window.innerHeight * 0.55;
-      window.scrollTo(0, Math.max(0, y));
+      window.scrollTo(0, Math.max(0, gemHead.getBoundingClientRect().top + window.scrollY - 12));
     },
   };
+}
+
+// ---------- 말씀 주머니 하나 ----------
+
+export function pocket(app, key) {
+  const s = G.SITUATIONS.find((x) => x.key === key);
+  if (!s) return notFound(app);
+  const mine = s.ids.filter(P.isDone).map((id) => app.byId[id]);
+  const later = s.ids.filter((id) => !P.isDone(id)).map((id) => app.byId[id]);
+
+  const root = h('div', { class: 'pocket-page' },
+    h('header', { class: 'navbar' },
+      h('button', { type: 'button', class: 'icon-btn', 'aria-label': '뒤로', onclick: () => app.back() }, icon('back')),
+      h('h1', { tabindex: '-1' }, `${s.emoji} ${s.label}`),
+      h('span')),
+    h('p', { class: 'sub' }, mine.length
+      ? `내가 외운 말씀 ${mine.length}개예요. 소리 내어 말해 봐요.`
+      : '아직 외운 말씀이 없어요. 아래 구절을 외우면 여기에 들어와요.'),
+    mine.map((v) => h('article', { class: 'card pv' },
+      h('div', { class: 'pv-head' },
+        h('h2', { class: 'ref' }, v.refLong),
+        speakButton(v, true)),
+      h('p', { class: 'verse' }, v.text))),
+    later.length ? h('h2', { class: 'sec-t' }, '더 외우면 생겨요') : null,
+    later.map((v) => h('button', { type: 'button', class: 'locked', onclick: () => app.go('#/verse/' + v.id) },
+      h('span', { 'aria-hidden': 'true' }, '🔒'),
+      h('span', null, h('b', null, v.ref), ` · ${v.id}번 구절`),
+      h('span', { class: 'chev', 'aria-hidden': 'true' }, '›'))),
+  );
+  return { el: root, title: s.label };
 }
 
 // ---------- 설정 ----------

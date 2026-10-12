@@ -21,7 +21,7 @@ export function h(tag, props, ...children) {
 const ICONS = {
   today: '<path d="M12 7.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9Z"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
   list: '<path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5v-15Z"/><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/><path d="M9 8h7M9 12h5"/>',
-  stairs: '<path d="M3 21h5v-5h5v-5h5V6h3"/><path d="M3 21h18"/>',
+  gem: '<path d="M6 3h12l4 6-10 12L2 9l4-6Z"/><path d="M2 9h20M12 21 8 9l4-6 4 6-4 12"/>',
   speak: '<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/>',
   stop: '<rect x="6" y="6" width="12" height="12" rx="2"/>',
   back: '<path d="M15 5 8 12l7 7"/>',
@@ -38,7 +38,7 @@ export function icon(name) {
   return t.content.firstChild;
 }
 
-// 그림(축하·꼭대기)도 고정 SVG.
+// 그림(축하)도 고정 SVG.
 export function art(name) {
   const t = document.createElement('template');
   if (name === 'climb') {
@@ -46,11 +46,6 @@ export function art(name) {
       <path d="M10 140 H60 V110 H100 V80 H140 V50 H190" fill="none" stroke="var(--accent)" stroke-width="10" stroke-linejoin="round" stroke-linecap="round"/>
       <g><circle cx="120" cy="34" r="12" fill="var(--text)"/><rect x="111" y="48" width="18" height="32" rx="9" fill="var(--text)"/></g>
       <path d="M150 20 l6 -12 M164 30 l12 -6 M160 14 l6 -6" stroke="var(--accent)" stroke-width="4" stroke-linecap="round"/>
-    </svg>`;
-  } else if (name === 'crown') {
-    t.innerHTML = `<svg width="140" height="140" viewBox="0 0 140 140" aria-hidden="true">
-      <circle cx="70" cy="70" r="66" fill="var(--accent)"/>
-      <path d="M38 92 h64 l-6 -40 -16 16 -10 -26 -10 26 -16 -16 z" fill="var(--accent-on)" stroke="var(--accent-on)" stroke-width="4" stroke-linejoin="round"/>
     </svg>`;
   }
   return t.content.firstChild;
