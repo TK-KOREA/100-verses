@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<defs>
+ <radialGradient id="bg" cx="50%" cy="22%" r="85%"><stop offset="0" stop-color="#EC6F2E"/><stop offset="1" stop-color="#B2390B"/></radialGradient>
+ <radialGradient id="halo" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#FFE7C2" stop-opacity=".55"/><stop offset="1" stop-color="#FFE7C2" stop-opacity="0"/></radialGradient>
+ <linearGradient id="pgL" x1="0" x2="1"><stop offset="0" stop-color="#FFF7EC"/><stop offset=".85" stop-color="#FBE9D4"/><stop offset="1" stop-color="#EBCBA6"/></linearGradient>
+ <linearGradient id="pgR" x1="1" x2="0"><stop offset="0" stop-color="#FFF7EC"/><stop offset=".85" stop-color="#FBE9D4"/><stop offset="1" stop-color="#EBCBA6"/></linearGradient>
+ <linearGradient id="stw" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset=".8" stop-color="#FFFFFF"/><stop offset="1" stop-color="#F1D6BA"/></linearGradient>
+</defs>
+<rect width="512" height="512" fill="url(#bg)"/>
+<g transform="translate(256 262) scale(.93) translate(-256 -248)">
+<circle cx="340" cy="96" r="120" fill="url(#halo)"/>
+<path d="M180 340 V252 H232 V200 H284 V148 H336 V96 H388 V340 Z" fill="url(#stw)"/>
+<path d="M232 252 V256 M284 200 V204" stroke="none"/>
+<path d="M256 452 C214 424 150 414 74 422 L74 300 C150 290 214 300 256 328 C298 300 362 290 438 300 L438 422 C362 414 298 424 256 452 Z" fill="#7C2D12"/>
+<path d="M256 440 C216 414 154 404 84 410 L84 292 C154 282 216 292 256 318 Z" fill="#E7C29C"/>
+<path d="M256 440 C296 414 358 404 428 410 L428 292 C358 282 296 292 256 318 Z" fill="#E7C29C"/>
+<path d="M256 430 C216 404 156 394 90 400 L90 282 C156 272 216 282 256 308 Z" fill="url(#pgL)"/>
+<path d="M256 430 C296 404 356 394 422 400 L422 282 C356 272 296 282 256 308 Z" fill="url(#pgR)"/>
+<g fill="none" stroke="#EBCDAA" stroke-width="7" stroke-linecap="round">
+ <path d="M122 314 C164 310 200 316 228 330"/><path d="M122 342 C164 338 200 344 228 358"/><path d="M122 370 C164 366 200 372 228 386"/>
+ <path d="M284 330 C312 316 348 310 390 314"/><path d="M284 358 C312 344 348 338 390 342"/><path d="M284 386 C312 372 348 366 390 370"/>
+</g>
+<path d="M362.0,30.0 L369.3,47.9 L388.6,49.3 L373.9,61.9 L378.5,80.7 L362.0,70.5 L345.5,80.7 L350.1,61.9 L335.4,49.3 L354.7,47.9Z" fill="#FFD43B" stroke="#FFD43B" stroke-width="5.04" stroke-linejoin="round"/>
+</g>
+</svg>
