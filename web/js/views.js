@@ -1154,7 +1154,8 @@ export function welcome(app) {
     if (e.key === 'Enter') start();
   });
   const root = h('div', { class: 'welcome' },
-    h('div', { class: 'welcome-mark' }, icon('gem')),
+    // 앱 아이콘과 같은 그림(홈 화면에서 누른 아이콘이 첫 화면에서 그대로 보이게).
+    h('img', { class: 'welcome-mark', src: 'icons/icon-512.png', alt: '', width: '88', height: '88' }),
     h('h1', { class: 'title', tabindex: '-1' }, '말씀 보석 100'),
     h('p', { class: 'sub', style: 'margin-top:8px;font-size:20px;line-height:1.6' }, '하루에 한 구절씩 외우며', h('br'), '열두 보석을 빛내요.'),
     installHint({ closable: false }),
