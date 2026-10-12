@@ -54,6 +54,33 @@ function eulReul(ref) {
   return '0136780'.includes(d) && d !== '' ? '을' : '를';
 }
 
+/** 이 말씀 보내기: 공유 창(카카오톡 등)을 연다. 없으면 글과 주소를 복사한다. */
+function shareButton(v) {
+  return h('button', {
+    type: 'button',
+    class: 'text-btn share-btn',
+    onclick: async () => {
+      // 시험용 ?api= 같은 주소 뒤 값은 빼고 앱 주소에 구절 번호만 붙인다.
+      const url = new URL('./', location.href).href + '#/verse/' + v.id;
+      const text = `말씀 100계단 ${v.id}번 · ${v.refLong}\n${v.text}`;
+      if (navigator.share) {
+        try {
+          await navigator.share({ title: `${v.refLong} · 말씀 100계단`, text, url });
+        } catch (e) {
+          if (e.name !== 'AbortError') toast('보내지 못했어요');
+        }
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(`${text}\n${url}`);
+        toast('말씀과 주소를 복사했어요');
+      } catch (e) {
+        toast('복사하지 못했어요');
+      }
+    },
+  }, icon('share'), '보내기');
+}
+
 function speakButton(v, iconOnly = false) {
   if (!S.canSpeak) return null;
   const btn = h('button', { type: 'button', class: iconOnly ? 'icon-btn' : 'btn secondary small' });
@@ -262,6 +289,7 @@ export function verse(app, id) {
     h('div', { class: 'practice-meta' },
       h('span', { class: 'eyebrow' }, topicLabel(v)),
       v.excerpt ? h('span', { class: 'tag', style: 'margin-left:0' }, '일부') : null,
+      shareButton(v),
     ),
     steps, hint, tools, text,
     v.excerpt ? h('p', { class: 'excerpt' }, `말씀 일부: ${v.excerptNote}`) : null,
@@ -991,7 +1019,9 @@ export function welcome(app) {
     const name = input.value.replace(/\s+/g, ' ').trim();
     if (name) P.setNickname(name);
     P.setWelcomed();
-    app.go('#/', { replace: true });
+    const to = app.afterWelcome || '#/';
+    app.afterWelcome = null;
+    app.go(to, { replace: true });
   };
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') start();

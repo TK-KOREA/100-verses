@@ -145,6 +145,8 @@ button:disabled { cursor: default; }
 .navbar { display: grid; grid-template-columns: 52px 1fr 52px; align-items: center; gap: 8px; margin: -8px 0 16px; }
 .navbar h1 { text-align: center; font-size: 21px; font-weight: 800; line-height: 1.3; }
 .practice-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+.practice-meta .share-btn { margin-left: auto; min-height: 44px; padding: 0 14px; font-size: 16px; }
+.practice-meta .share-btn svg { width: 20px; height: 20px; }
 .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; background: var(--surface-2); padding: 4px; border-radius: 16px; }
 .steps button {
   min-height: 56px; border: 0; border-radius: 12px; background: transparent;

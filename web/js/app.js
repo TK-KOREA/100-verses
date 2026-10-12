@@ -26,11 +26,19 @@ const app = {
   navCount: 0,
   current: null,
   overlay: null,
+  afterWelcome: null, // 받은 구절 주소로 처음 열었으면 시작하기 뒤에 그 구절로 간다.
 };
 
+// 바꿔 끼운 이동(location.replace)은 앱 안 이동 수에 넣지 않는다. 넣으면 받은 링크로 처음 연 뒤
+// "뒤로"가 앱 밖 이전 페이지로 나간다.
+let replacing = false;
 app.go = (hash, { replace = false } = {}) => {
-  if (replace) location.replace(hash);
-  else location.hash = hash;
+  if (replace) {
+    if (hash !== location.hash) replacing = true;
+    location.replace(hash);
+  } else {
+    location.hash = hash;
+  }
 };
 
 /** 앱 안에서 온 화면이면 이전 화면으로, 처음 연 화면이면 오늘로. */
@@ -88,6 +96,7 @@ const sig = () => JSON.stringify([P.doneList(), P.nickname(), P.kstToday()]);
 function render({ keepScroll = false, first = false } = {}) {
   const r = parse(location.hash);
   if (!P.welcomed() && r.name !== 'welcome' && r.name !== 'settings') {
+    if (r.name === 'verse') app.afterWelcome = location.hash;
     app.go('#/welcome', { replace: true });
     return;
   }
@@ -139,7 +148,8 @@ P.onChange(() => {
 });
 
 window.addEventListener('hashchange', () => {
-  app.navCount++;
+  if (replacing) replacing = false;
+  else app.navCount++;
   render();
 });
 
