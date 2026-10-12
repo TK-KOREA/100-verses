@@ -1,6 +1,6 @@
 // 오프라인 저장. 처음 열 때 모든 파일과 구절 데이터를 저장하고, 다음부터는 저장한 것을 먼저 보여 준 뒤
 // 뒤에서 새 파일을 받아 둔다(다음에 열 때 반영). 파일을 바꾸면 VERSION을 올린다.
-const VERSION = 'v100-2026-10-12-4';
+const VERSION = 'v100-2026-10-12-5';
 const FILES = [
   './',
   'index.html',
@@ -17,6 +17,7 @@ const FILES = [
   'data/verses.json',
   'icons/icon-192.png',
   'icons/icon-512.png',
+  'icons/icon-maskable-512.png',
   'icons/apple-touch-icon.png',
 ];
 
@@ -46,9 +47,12 @@ self.addEventListener('fetch', (e) => {
   e.respondWith(
     caches.open(VERSION).then(async (cache) => {
       const hit = await cache.match(key, { ignoreSearch: true });
-      const fresh = fetch(req, { cache: 'no-cache' })
-        .then((res) => {
-          if (res.ok) cache.put(key, res.clone());
+      // 화면 이동 요청은 옵션을 붙여 다시 만들 수 없는 브라우저가 있어 주소로 받는다.
+      const fresh = fetch(req.mode === 'navigate' ? req.url : req, { cache: 'no-cache' })
+        .then(async (res) => {
+          // 주소 끝 /가 빠져 넘겨받은 응답은 그대로 쓰면 Safari가 화면을 열지 않는다. 새 응답으로 옮긴다.
+          if (res.redirected) res = new Response(await res.blob(), { status: res.status, statusText: res.statusText, headers: res.headers });
+          if (res.ok) await cache.put(key, res.clone());
           return res;
         })
         .catch(() => null);

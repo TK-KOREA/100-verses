@@ -822,6 +822,7 @@ const RESTORE_MSG = {
   LOCKED_OUT: '여러 번 틀려서 10분 동안 쉬어요. 잠시 뒤 다시 해 주세요.',
   INVALID: '코드는 "해바라기-4827"처럼 낱말과 숫자 네 자리예요.',
   NETWORK: '지금은 연결이 어려워요. 잠시 뒤 다시 눌러 주세요.',
+  OFFLINE: '인터넷에 연결되어야 불러올 수 있어요.',
   OFFLINE_ONLY: '아직 서버가 연결되지 않아 불러올 수 없어요.',
 };
 
@@ -871,6 +872,11 @@ export function settings(app, _id, query) {
     let action = null;
     if (!st.hasServer) {
       line = '이 기기에만 저장돼요 (서버 연결 전)';
+    } else if (st.state === 'offline') {
+      dot = st.pending > 0 ? 'wait' : '';
+      line = st.pending > 0
+        ? `인터넷이 끊겨 있어요. 기록 ${st.pending}개는 이 기기에 있고, 연결되면 보내요.`
+        : '인터넷이 끊겨 있어요. 외운 기록은 이 기기에 저장돼요.';
     } else if (st.state === 'syncing') {
       line = '보내는 중…';
     } else if (st.pending > 0) {
@@ -895,6 +901,10 @@ export function settings(app, _id, query) {
       restoreMsg.textContent = RESTORE_MSG.INVALID;
       return;
     }
+    if (P.isOffline()) {
+      restoreMsg.textContent = RESTORE_MSG.OFFLINE;
+      return;
+    }
     restoreBtn.disabled = true;
     restoreMsg.className = 'msg';
     restoreMsg.textContent = '불러오는 중…';
@@ -905,7 +915,7 @@ export function settings(app, _id, query) {
       nameInput.value = P.nickname();
     } catch (e) {
       restoreMsg.className = 'msg err';
-      restoreMsg.textContent = RESTORE_MSG[e.code] || RESTORE_MSG.NETWORK;
+      restoreMsg.textContent = (e.code === 'NETWORK' && P.isOffline() && RESTORE_MSG.OFFLINE) || RESTORE_MSG[e.code] || RESTORE_MSG.NETWORK;
     } finally {
       restoreBtn.disabled = false;
     }

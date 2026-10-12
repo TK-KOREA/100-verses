@@ -153,7 +153,9 @@ window.addEventListener('hashchange', () => {
   render();
 });
 
+// 연결이 돌아오면 바로 보내고, 끊기면 설정 화면의 저장 상태를 바꾼다.
 window.addEventListener('online', () => P.sync());
+window.addEventListener('offline', () => P.sync());
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
     P.sync();
@@ -184,6 +186,7 @@ async function boot() {
   }
   render({ first: true });
   P.sync();
+  P.keepStorage();
 }
 
 // 오프라인 저장. 내 컴퓨터에서 고치는 동안에는 옛 파일이 보이지 않게 ?sw=1일 때만 켠다.

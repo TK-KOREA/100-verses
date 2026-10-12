@@ -136,6 +136,20 @@ export function setNickname(name) {
 export const pendingCount = () => outbox.length;
 export const syncState = () => ({ ...sync$, pending: outbox.length, hasServer: !!API_URL });
 
+/**
+ * 홈 화면 앱이면 브라우저가 저장 공간이 모자랄 때 기록과 오프라인 파일을 지우지 않게 해 달라고 한다.
+ * 브라우저 안에서는 묻지 않는다(Firefox는 창을 띄워 묻는다).
+ */
+export async function keepStorage() {
+  try {
+    const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+    if (!standalone || !navigator.storage?.persist) return;
+    if (!(await navigator.storage.persisted())) await navigator.storage.persist();
+  } catch (e) {
+    /* 지원하지 않으면 그대로 둔다 */
+  }
+}
+
 export const welcomed = () => load('welcomed', false);
 export const setWelcomed = () => save('welcomed', true);
 
@@ -166,9 +180,18 @@ function setSync(state, error = '') {
 let running = null;
 let again = false;
 let retryTimer = null;
+let retryDelay = 30000;
+
+// navigator.onLine이 false면 확실히 끊긴 것이다(true는 연결됐다는 보장이 없다).
+export const isOffline = () => typeof navigator !== 'undefined' && navigator.onLine === false;
 
 export function sync() {
   if (!API_URL) return Promise.resolve();
+  if (isOffline()) {
+    // 보내 보지 않는다. 다시 연결되면 online 알림(app.js)으로 보낸다.
+    if (sync$.state !== 'offline') setSync('offline');
+    return running || Promise.resolve();
+  }
   if (running) {
     again = true;
     return running;
@@ -182,10 +205,18 @@ export function sync() {
         await syncOnce();
       } while ((again || outbox.length) && ++rounds < 5);
       setSync('ok');
+      retryDelay = 30000;
     } catch (e) {
-      setSync(e.code === 'NETWORK' ? 'pending' : 'error', e.code || 'NETWORK');
-      // 앱을 다시 열기 전에도 한 번 더 보낸다(연결 실패, 횟수 제한).
-      if (!retryTimer) retryTimer = setTimeout(() => { retryTimer = null; sync(); }, 30000);
+      if (e.code === 'NETWORK' && isOffline()) {
+        setSync('offline');
+      } else {
+        setSync(e.code === 'NETWORK' ? 'pending' : 'error', e.code || 'NETWORK');
+        // 앱을 다시 열기 전에도 다시 보낸다(약한 연결, 횟수 제한). 30초부터 두 배씩, 10분까지.
+        if (!retryTimer) {
+          retryTimer = setTimeout(() => { retryTimer = null; sync(); }, retryDelay);
+          retryDelay = Math.min(retryDelay * 2, 600000);
+        }
+      }
     } finally {
       running = null;
     }
