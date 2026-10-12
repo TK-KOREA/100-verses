@@ -110,17 +110,18 @@ function shareButton(v) {
     onclick: async () => {
       // 시험용 ?api= 같은 주소 뒤 값은 빼고 앱 주소에 구절 번호만 붙인다.
       const url = new URL('./', location.href).href + '#/verse/' + v.id;
-      const text = `말씀 보석 100 ${v.id}번 · ${v.refLong}\n${v.text}`;
+      // title·url을 따로 넘기면 카카오톡 등이 제목을 본문 앞에 또 붙인다. 글 하나에 모두 담는다.
+      const text = `${v.text}\n— ${v.refLong}\n\n말씀 보석 100에서 함께 외워요\n${url}`;
       if (navigator.share) {
         try {
-          await navigator.share({ title: `${v.refLong} · 말씀 보석 100`, text, url });
+          await navigator.share({ text });
         } catch (e) {
           if (e.name !== 'AbortError') toast('보내지 못했어요');
         }
         return;
       }
       try {
-        await navigator.clipboard.writeText(`${text}\n${url}`);
+        await navigator.clipboard.writeText(text);
         toast('말씀과 주소를 복사했어요');
       } catch (e) {
         toast('복사하지 못했어요');
