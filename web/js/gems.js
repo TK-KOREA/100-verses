@@ -34,6 +34,12 @@ export const SITUATIONS = [
 export const foundOf = (id) => FOUNDS.find((f) => id >= f.from && id <= f.to);
 export const foundIds = (f) => Array.from({ length: f.to - f.from + 1 }, (_, i) => f.from + i);
 
+/** 지금 외우는 보석 번호(아직 안 외운 첫 구절의 묶음). 다 외웠으면 마지막 보석. 보석빛 테마의 색을 정한다. */
+export function currentFoundNo() {
+  for (let id = 1; id <= 100; id++) if (!P.isDone(id)) return foundOf(id).no;
+  return FOUNDS.length;
+}
+
 /** 외운 순서가 아니라 구절 번호로 센다(목록에서 앞 구절을 먼저 외워도 맞게). */
 export function gemStat(f) {
   const n = f.to - f.from + 1;

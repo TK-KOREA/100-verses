@@ -27,6 +27,54 @@ function setFontLevel(v) {
   applyFontLevel();
 }
 
+// ---------- 화면 색(테마) ----------
+// 기본: 기기 설정을 따름. 보석빛: 강조색이 지금 외우는 보석 색. 등불: 늘 어두움. 색만 바뀌고 배치·문구는 그대로다.
+const THEMES = [
+  ['default', '기본', ['#FAF7F2', '#FFFFFF', '#C2410C']],
+  ['jewel', '보석빛', ['#F6F7FA', '#FFFFFF', 'linear-gradient(90deg, #1A864C, #A9583E, #2F5FD0, #8B59D5)']],
+  ['night', '등불', ['radial-gradient(90% 70% at 50% 0, #3A2414, #0C0806 70%)', '#18110C', '#E9A257']],
+];
+// 위쪽 상태 표시줄 색(밝게, 어둡게)
+const BAR = { default: ['#FAF7F2', '#15120F'], jewel: ['#F6F7FA', '#0E1016'], night: ['#0C0806', '#0C0806'] };
+export const themeName = () => {
+  const v = P.load('theme', 'default');
+  return BAR[v] ? v : 'default';
+};
+/** 고른 테마와 지금 보석을 html에 적는다. 진도가 바뀔 때마다 다시 부른다(보석빛의 색이 바뀜). */
+export function applyTheme() {
+  const t = themeName();
+  const root = document.documentElement;
+  if (t === 'default') delete root.dataset.theme;
+  else root.dataset.theme = t;
+  root.dataset.gem = String(G.currentFoundNo());
+  document.querySelectorAll('meta[name="theme-color"]').forEach((m) => {
+    m.content = BAR[t][String(m.media).includes('dark') ? 1 : 0];
+  });
+}
+
+function themePicker() {
+  const box = h('div', { class: 'theme-pick', role: 'radiogroup', 'aria-label': '화면 색' });
+  const paint = () => {
+    const cur = themeName();
+    box.replaceChildren(...THEMES.map(([val, label, [bg, card, accent]]) => h('button', {
+      type: 'button',
+      role: 'radio',
+      'aria-checked': String(cur === val),
+      onclick: () => {
+        P.save('theme', val);
+        applyTheme();
+        paint();
+      },
+    },
+    h('span', { class: 'mini', style: `background:${bg}`, 'aria-hidden': 'true' },
+      h('i', { class: 'mini-card', style: `background:${card}` }),
+      h('i', { class: 'mini-btn', style: `background:${accent}` })),
+    h('span', null, label))));
+  };
+  paint();
+  return box;
+}
+
 /** 글자 크기 3단계 고르기. 구절·장절·안내 글자만 키우고 버튼은 그대로 둔다. 설정과 처음 화면에서 쓴다. */
 function fontPicker() {
   const seg = h('div', { class: 'seg', role: 'radiogroup', 'aria-label': '글자 크기', style: 'margin-top:0' });
@@ -540,7 +588,8 @@ function celebrate(app, v) {
       h('button', { type: 'button', class: 'link', style: 'margin-top:8px', onclick: undo }, '잘못 눌렀어요'),
     );
   } else if (gem.full) {
-    // 이 구절로 보석 하나(묶음)를 다 외웠다.
+    // 이 구절로 보석 하나(묶음)를 다 외웠다. 보석빛 테마는 축하하는 동안 방금 채운 보석 색을 두고, 닫으면 다음 보석 색으로 바뀐다.
+    document.documentElement.dataset.gem = String(f.no);
     title.textContent = `${f.name}${G.iGa(f.name)} 모두 빛나요!`;
     const lines = [`${f.what} 말씀 ${gem.n}구절을`, '다 마음에 담았어요.'];
     if (streak >= 2) lines.push(`🔥 ${streak}일 연속이에요`);
@@ -1048,6 +1097,11 @@ export function settings(app, _id, query) {
         h('p', { class: 'ref', style: 'margin-top:0' }, '베드로전서 5:7'),
         h('p', { class: 'verse', style: 'margin-top:8px' }, '여러분의 모든 염려를 하나님께 맡기십시오.'),
       ),
+    ),
+    h('section', { class: 'section' },
+      h('h2', null, '화면 색'),
+      themePicker(),
+      h('p', { class: 'help' }, '보석빛은 지금 외우는 보석 색으로 바뀌어요. 등불은 자기 전에 쓰기 좋게 늘 어두워요.'),
     ),
     speedSeg ? h('section', { class: 'section' }, h('h2', null, '읽어 주는 빠르기'), speedSeg) : null,
     h('section', { class: 'section' }, h('h2', null, '저장 상태'), h('div', { class: 'card' }, statusBox)),

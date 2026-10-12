@@ -4,7 +4,8 @@ import * as P from './progress.js';
 import * as S from './speech.js';
 import * as V from './views.js';
 
-V.applyFontLevel(); // 첫 화면을 그리기 전에 글자 크기를 맞춘다.
+V.applyFontLevel(); // 첫 화면을 그리기 전에 글자 크기와 화면 색을 맞춘다.
+V.applyTheme();
 
 const main = document.getElementById('app');
 const tabbar = document.getElementById('tabbar');
@@ -66,6 +67,7 @@ app.closeOverlay = () => {
   main.removeAttribute('aria-hidden');
   tabbar.removeAttribute('aria-hidden');
   if (lastFocus && lastFocus.isConnected) lastFocus.focus({ preventScroll: true });
+  V.applyTheme(); // 보석 축하가 잠시 붙잡아 둔 보석빛 색을 지금 보석으로 돌린다.
 };
 
 function parse(hash) {
@@ -143,6 +145,7 @@ function render({ keepScroll = false, first = false } = {}) {
 
 // 진도가 바뀌면 지금 화면을 새로 그린다. 연습·설정 화면은 스스로 일부만 고친다.
 P.onChange(() => {
+  V.applyTheme(); // 보석빛은 묶음을 다 외우면 다음 보석 색으로 바뀐다.
   const cur = app.current;
   if (!cur) return;
   if (cur.view.update) {
