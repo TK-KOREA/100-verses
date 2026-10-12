@@ -232,7 +232,7 @@ export function verse(app, id) {
   if (!v) return notFound(app);
   let stage = 1;
   let lastDone = null;
-  // 두 번 누름 막기: 아래 버튼이 바뀐 직후 0.4초 동안은 누름을 받지 않는다.
+  // 두 번 누름 막기: 아래 버튼이 바뀐 직후 0.25초 동안은 누름을 받지 않는다.
   // (안 막으면 "다음 단계"를 두 번 눌러 한 단계를 건너뛰거나, 4단계의 "처음부터 다시"가 눌린다)
   let lockUntil = 0;
   const guard = (fn) => () => {
@@ -294,7 +294,7 @@ export function verse(app, id) {
         }
         reads++;
         // 세 번째에 버튼이 "다음 단계"로 바뀌므로, 같은 자리를 연달아 누른 것이 바로 넘어가지 않게 잠깐 막는다.
-        if (reads >= 3) lockUntil = performance.now() + 400;
+        if (reads >= 3) lockUntil = performance.now() + 250;
         actions.replaceChildren(readButton());
       }),
     }, doneReading ? '다음 단계' : `읽었어요 ${reads}/3`);
@@ -442,7 +442,7 @@ export function verse(app, id) {
     }
 
     actions.replaceChildren();
-    lockUntil = performance.now() + 400;
+    lockUntil = performance.now() + 250;
     if (stage === 1) {
       actions.append(readButton());
     } else if (stage < 4) {
@@ -482,9 +482,9 @@ function celebrate(app, v) {
   const streak = P.streak();
   const next = P.nextVerseId(app.verses);
   const all = next == null;
-  // arming: 뜬 직후 0.7초는 버튼이 눌리지 않는다("외웠어요!" 두 번 누름이 아래 버튼에 닿지 않게).
+  // arming: 뜬 직후 0.4초는 버튼이 눌리지 않는다("외웠어요!" 두 번 누름이 아래 버튼에 닿지 않게).
   const ov = h('div', { class: 'overlay arming' + (all ? ' summit' : ''), role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'cel-title' });
-  setTimeout(() => ov.classList.remove('arming'), 700);
+  setTimeout(() => ov.classList.remove('arming'), 400);
   const inner = h('div', { class: 'overlay-inner' });
   const title = h('h2', { class: 'title', id: 'cel-title', tabindex: '-1', style: 'margin-top:8px' });
 
@@ -548,13 +548,68 @@ export function list(app) {
 
   const seg = h('div', { class: 'seg', role: 'radiogroup', 'aria-label': '보기' });
   const topics = h('div', { class: 'topics', role: 'group', 'aria-label': '주제 바로가기' });
-  const head = h('div', { class: 'list-head' }, h('h1', { class: 'title', tabindex: '-1' }, '모든 구절'), seg, topics);
+  // 번호로 찾기. 숫자가 아니면 장절·본문에서 찾는다. 찾는 동안에는 보기·주제 줄을 감춘다.
+  const search = h('input', {
+    class: 'input search', type: 'search', inputmode: 'numeric', enterkeyhint: 'go',
+    autocomplete: 'off', placeholder: '번호 찾기', 'aria-label': '번호로 찾기', value: app.listQuery || '',
+  });
+  const head = h('div', { class: 'list-head' },
+    h('div', { class: 'head-row' }, h('h1', { class: 'title', tabindex: '-1' }, '모든 구절'), search),
+    seg, topics);
   const body = h('div');
   const root = h('div', null, head, body);
 
   const keep = (v) => (app.listFilter === 'done' ? P.isDone(v.id) : app.listFilter === 'todo' ? !P.isDone(v.id) : true);
 
+  function row(v) {
+    const d = P.isDone(v.id);
+    const nx = v.id === nextId;
+    return h('button', { type: 'button', class: 'row', onclick: () => app.go('#/verse/' + v.id) },
+      h('span', { class: 'num' + (d ? ' done' : nx ? ' next' : ''), 'aria-hidden': 'true' }, String(v.id)),
+      h('span', { class: 'row-t' },
+        h('b', null, v.ref, v.subtopic ? h('span', { class: 'tag' }, v.subtopic) : null),
+        h('p', null, v.text.split('\n')[0])),
+      h('span', { class: 'chev', 'aria-hidden': 'true' }, '›'),
+      h('span', { class: 'sr-only' }, d ? ', 외웠어요' : nx ? ', 오늘의 구절' : ''),
+    );
+  }
+
+  const query = () => search.value.trim();
+  function found() {
+    const q = query();
+    if (/^\d+$/.test(q)) return app.byId[Number(q)] ? [app.byId[Number(q)]] : [];
+    const n = q.replace(/\s+/g, '');
+    return app.verses.filter((v) => [v.ref, v.refLong, v.text].some((t) => t.replace(/\s+/g, '').includes(n)));
+  }
+  function renderFound() {
+    const list = found();
+    body.replaceChildren(list.length
+      ? h('div', { class: 'group', style: 'margin-top:16px' }, list.map(row))
+      : h('div', { class: 'empty' },
+        h('p', { class: 'empty-t' }, /^\d+$/.test(query()) ? `${query()}번 말씀은 없어요` : '찾는 말씀이 없어요'),
+        h('p', { class: 'sub' }, `1부터 ${app.verses.length}까지 번호로 찾아요`)));
+  }
+  search.addEventListener('input', () => {
+    app.listQuery = search.value;
+    render();
+    window.scrollTo(0, 0);
+  });
+  search.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    const list = query() ? found() : [];
+    if (list.length === 1) app.go('#/verse/' + list[0].id);
+    else search.blur();
+  });
+
   function render() {
+    const searching = !!query();
+    seg.hidden = searching;
+    topics.hidden = searching;
+    if (searching) {
+      renderFound();
+      return;
+    }
+
     seg.replaceChildren(...FILTERS.map(([k, label]) => h('button', {
       type: 'button',
       role: 'radio',
@@ -588,18 +643,7 @@ export function list(app) {
       const doneN = g.verses.filter((v) => P.isDone(v.id)).length;
       body.append(h('section', { 'data-g': String(g.gi) },
         h('h2', { class: 'group-head' }, h('span', null, g.topic), h('small', { 'aria-label': `${g.verses.length}구절 중 ${doneN}구절 외움` }, `${doneN}/${g.verses.length}`)),
-        h('div', { class: 'group' }, g.items.map((v) => {
-          const d = P.isDone(v.id);
-          const nx = v.id === nextId;
-          return h('button', { type: 'button', class: 'row', onclick: () => app.go('#/verse/' + v.id) },
-            h('span', { class: 'num' + (d ? ' done' : nx ? ' next' : ''), 'aria-hidden': 'true' }, d ? '✓' : String(v.id)),
-            h('span', { class: 'row-t' },
-              h('b', null, v.ref, v.subtopic ? h('span', { class: 'tag' }, v.subtopic) : null),
-              h('p', null, v.text.split('\n')[0])),
-            h('span', { class: 'chev', 'aria-hidden': 'true' }, '›'),
-            h('span', { class: 'sr-only' }, d ? ', 외웠어요' : nx ? ', 오늘의 구절' : ''),
-          );
-        })),
+        h('div', { class: 'group' }, g.items.map(row)),
       ));
     });
     requestAnimationFrame(spy);
@@ -610,13 +654,13 @@ export function list(app) {
       const on = b.dataset.g === String(gi);
       if ((b.getAttribute('aria-selected') === 'true') === on) return;
       b.setAttribute('aria-selected', String(on));
-      if (on) topics.scrollTo({ left: b.offsetLeft - 16, behavior: 'smooth' });
+      if (on) topics.scrollLeft = b.offsetLeft - 16;
     });
   }
   // 칩으로 이동한 주제. 끝쪽 주제는 목록이 바닥에 닿아 제목 줄까지 못 올라오므로, 바닥에서는 누른 칩을 그대로 둔다.
   let jumped = null;
   function spy() {
-    if (!root.isConnected) return;
+    if (!root.isConnected || query()) return;
     const atBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
     if (atBottom) {
       const secs = body.querySelectorAll('section');
@@ -636,7 +680,8 @@ export function list(app) {
     if (!sec) return;
     const top = sec.getBoundingClientRect().top + window.scrollY - head.offsetHeight + 1;
     jumped = String(gi);
-    window.scrollTo({ top, behavior: 'smooth' });
+    // 바로 옮긴다. 미끄러지게 하면 1초 넘게 칩 불빛이 앞 주제들을 하나씩 지나간다.
+    window.scrollTo(0, top);
     setActive(gi);
   }
   // 손으로 스크롤하기 시작하면 칩 고정을 푼다.
@@ -708,7 +753,6 @@ export function stairs(app) {
     // 계단 중간으로 스크롤해도 몇 계단인지 보이게 제목 줄을 위에 붙인다.
     h('div', { class: 'head-row stairs-head' },
       h('h1', { class: 'title', tabindex: '-1' }, '내 계단', h('span', { class: 'head-count' }, `${n} / ${STEP_COUNT}`)),
-      h('a', { class: 'text-btn', href: '#/settings' }, icon('gear'), '설정'),
     ),
     h('div', { class: 'card stairs-card', style: 'margin-top:4px;padding:20px' },
       h('div', { class: 'summary' },
@@ -878,11 +922,7 @@ export function settings(app, _id, query) {
   }
 
   root.append(...[
-    h('header', { class: 'navbar' },
-      h('button', { type: 'button', class: 'icon-btn', 'aria-label': '뒤로', onclick: () => app.back() }, icon('back')),
-      h('h1', { tabindex: '-1' }, '설정'),
-      h('span'),
-    ),
+    h('h1', { class: 'title', tabindex: '-1' }, '설정'),
     h('section', { class: 'section' },
       h('h2', null, h('label', { for: 'nick' }, '불러 줄 이름')),
       h('div', { class: 'card' },

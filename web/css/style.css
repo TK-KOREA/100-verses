@@ -74,7 +74,7 @@ button:disabled { cursor: default; }
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
   background: var(--surface); border-top: 1px solid var(--line);
   padding: 4px max(8px, calc((100vw - 560px) / 2)) calc(var(--safe-b) + 8px);
-  display: grid; grid-template-columns: repeat(3, 1fr);
+  display: grid; grid-template-columns: repeat(4, 1fr);
 }
 .tabbar[hidden] { display: none; }
 .tab {
@@ -137,7 +137,6 @@ button:disabled { cursor: default; }
 .done-badge {
   width: 72px; height: 72px; border-radius: 36px; margin: 0 auto 16px;
   background: var(--accent); color: var(--accent-on); display: flex; align-items: center; justify-content: center;
-  animation: pop .45s cubic-bezier(.2, .9, .3, 1.4) both;
 }
 .done-badge svg { width: 40px; height: 40px; stroke-width: 3; }
 .today .group-head { padding-top: 24px; }
@@ -197,16 +196,22 @@ button:disabled { cursor: default; }
 .overlay .grow { flex: 1; min-height: 16px; }
 .overlay .stack { width: 100%; }
 .big-num { font-size: 72px; font-weight: 900; color: var(--accent); line-height: 1; letter-spacing: -0.03em; margin-top: 24px; }
-.climb-figure { animation: climb .6s cubic-bezier(.2, .9, .3, 1.2) both; }
-@keyframes climb { from { transform: translate(-40px, 30px); opacity: 0; } to { transform: none; opacity: 1; } }
-.pop { animation: pop .45s .15s cubic-bezier(.2, .9, .3, 1.4) both; }
-@keyframes pop { from { transform: scale(.6); opacity: 0; } to { transform: none; opacity: 1; } }
+/* 움직임은 축하 숫자 하나만, 짧게. 버튼을 기다리게 하지 않는다. */
+.pop { animation: pop .25s ease-out both; }
+@keyframes pop { from { transform: scale(.85); } to { transform: none; } }
 
 /* ── 모든 구절 ───────────────── */
 .list-head {
   position: sticky; top: 0; z-index: 5; background: var(--bg);
   margin: calc(-1 * var(--safe-t) - 20px) -16px 0; padding: calc(var(--safe-t) + 20px) 16px 0;
   border-bottom: 1px solid var(--line);
+}
+.list-head .head-row { padding-bottom: 12px; }
+.list-head .seg { margin-top: 0; }
+.list-head [hidden] { display: none; }
+.input.search {
+  width: 132px; flex: none; min-height: 48px; padding: 0 14px; font-size: 18px; border-radius: 24px;
+  -webkit-appearance: none; appearance: none;
 }
 .seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; background: var(--surface-2); padding: 4px; border-radius: 16px; margin-top: 12px; }
 .seg button {

@@ -13,6 +13,7 @@ const TABS = [
   ['today', '#/', '오늘', 'today'],
   ['list', '#/list', '구절', 'list'],
   ['stairs', '#/stairs', '계단', 'stairs'],
+  ['settings', '#/settings', '설정', 'gear'],
 ];
 
 const app = {
@@ -20,6 +21,7 @@ const app = {
   byId: {},
   groups: [],
   listFilter: 'all',
+  listQuery: '',
   scrolls: {},
   navCount: 0,
   current: null,
@@ -65,7 +67,7 @@ function parse(hash) {
   if (p === '/') return { name: 'today', tab: true, key: 'today' };
   if (p === '/list') return { name: 'list', tab: true, key: 'list' };
   if (p === '/stairs') return { name: 'stairs', tab: true, key: 'stairs' };
-  if (p === '/settings') return { name: 'settings', key: 'settings', query };
+  if (p === '/settings') return { name: 'settings', tab: true, key: 'settings', query };
   if (p === '/welcome') return { name: 'welcome', key: 'welcome' };
   if ((m = p.match(/^\/verse\/(\d{1,3})$/))) return { name: 'verse', param: Number(m[1]), key: 'verse' };
   return { name: 'notFound', key: 'notFound' };
