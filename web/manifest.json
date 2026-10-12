@@ -1,7 +1,7 @@
 {
-  "name": "말씀 100계단",
-  "short_name": "100계단",
-  "description": "하루에 한 구절씩 외우며 꼭대기까지 오르는 어린이 말씀 암송",
+  "name": "말씀 보석 100",
+  "short_name": "말씀보석",
+  "description": "하루에 한 구절씩 외우며 열두 보석을 빛내는 어린이 말씀 암송",
   "lang": "ko",
   "start_url": "./",
   "scope": "./",

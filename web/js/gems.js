@@ -67,11 +67,14 @@ export function gemArt(f, fill, width = 44, { animate = false } = {}) {
     points: GEM, fill: 'var(--surface-2)', 'stroke-width': 1.6, 'stroke-linejoin': 'round',
     stroke: fill > 0 ? f.color : 'var(--line-strong)', 'stroke-dasharray': fill > 0 ? null : '3 2',
   }));
-  const body = svg('g', { 'clip-path': `url(#${id})`, class: animate ? 'gem-fill' : null });
-  body.append(
+  // 움직임은 안쪽 묶음에 건다. 바깥 묶음에 CSS clip-path를 걸면 차오른 높이(clip-path 속성)를 덮어쓴다.
+  const body = svg('g', { 'clip-path': `url(#${id})` });
+  const fillG = svg('g', { class: animate ? 'gem-fill' : null });
+  fillG.append(
     svg('polygon', { points: GEM, fill: f.color }),
     svg('path', { d: 'M2 12h36M10 2l4 10 6-10 6 10 4-10M14 12l6 22 6-22', fill: 'none', stroke: '#fff', 'stroke-opacity': '.55', 'stroke-width': 1 }),
   );
+  body.append(fillG);
   s.append(body);
   if (fill >= 1) s.append(svg('path', { d: 'M33 1l1.2 2.8L37 5l-2.8 1.2L33 9l-1.2-2.8L29 5l2.8-1.2Z', fill: '#fff', class: animate ? 'gem-spark' : null }));
   return s;

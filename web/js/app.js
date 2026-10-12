@@ -125,7 +125,7 @@ function render({ keepScroll = false, first = false } = {}) {
   main.classList.toggle('no-tabbar', !r.tab);
   document.body.classList.toggle('no-tabbar', !r.tab);
   if (r.tab) paintTabs(r.name);
-  document.title = view.title && r.name !== 'today' ? `${view.title} · 말씀 100계단` : '말씀 100계단';
+  document.title = view.title && r.name !== 'today' ? `${view.title} · 말씀 보석 100` : '말씀 보석 100';
 
   let restored = false;
   if (keepScroll) {

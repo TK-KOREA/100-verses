@@ -1,6 +1,6 @@
 // 화면들: 오늘, 연습(+축하), 모든 구절, 내 말씀(+말씀 주머니), 설정, 처음.
 // 각 화면은 {el, title, after?, update?, cleanup?}를 돌려준다.
-import { h, icon, art, toast } from './ui.js';
+import { h, icon, toast } from './ui.js';
 import * as P from './progress.js';
 import * as S from './speech.js';
 import * as L from './listen.js';
@@ -62,10 +62,10 @@ function shareButton(v) {
     onclick: async () => {
       // 시험용 ?api= 같은 주소 뒤 값은 빼고 앱 주소에 구절 번호만 붙인다.
       const url = new URL('./', location.href).href + '#/verse/' + v.id;
-      const text = `말씀 100계단 ${v.id}번 · ${v.refLong}\n${v.text}`;
+      const text = `말씀 보석 100 ${v.id}번 · ${v.refLong}\n${v.text}`;
       if (navigator.share) {
         try {
-          await navigator.share({ title: `${v.refLong} · 말씀 100계단`, text, url });
+          await navigator.share({ title: `${v.refLong} · 말씀 보석 100`, text, url });
         } catch (e) {
           if (e.name !== 'AbortError') toast('보내지 못했어요');
         }
@@ -192,12 +192,12 @@ export function today(app) {
 
   const chipsNow = () => {
     const c = [];
-    if (count > 0) c.push(h('span', { class: 'chip accent' }, `지금 ${count}계단`));
+    if (count > 0) c.push(h('span', { class: 'chip accent' }, `외운 말씀 ${count}개`));
     if (streak >= 2) c.push(h('span', { class: 'chip' }, `🔥 ${streak}일 연속`));
     return c;
   };
 
-  // 오늘 한 계단이라도 올랐으면 "오늘은 다 했어요". 더 하고 싶은 아이는 링크로 이어 간다.
+  // 오늘 한 구절이라도 외웠으면 "오늘은 다 했어요". 더 하고 싶은 아이는 링크로 이어 간다.
   const todayList = doneToday();
   if (todayList.length) {
     root.append(...[
@@ -207,7 +207,7 @@ export function today(app) {
       h('section', { class: 'card done-card' },
         h('div', { class: 'done-badge', 'aria-hidden': 'true' }, icon('check')),
         h('h2', { class: 'title' }, '오늘은 다 했어요!'),
-        h('p', { class: 'sub', style: 'margin-top:6px' }, todayList.length >= 2 ? `오늘 ${todayList.length}계단 올랐어요` : '오늘 한 계단 올랐어요'),
+        h('p', { class: 'sub', style: 'margin-top:6px' }, todayList.length >= 2 ? `오늘 ${todayList.length}구절 외웠어요` : '오늘 한 구절 외웠어요'),
       ),
       h('h2', { class: 'group-head' }, h('span', null, '오늘 외운 말씀')),
       h('div', { class: 'group' }, todayList.map((m) => {
@@ -227,7 +227,7 @@ export function today(app) {
   }
 
   const v = app.byId[nextId];
-  const hello = count === 0 ? '첫 계단을 올라 볼까요?' : '오늘도 한 계단 올라가요';
+  const hello = count === 0 ? '첫 말씀을 외워 볼까요?' : '오늘도 한 구절 외워요';
   const chips = chipsNow();
 
   root.append(...[
@@ -236,7 +236,7 @@ export function today(app) {
     h('p', { class: 'sub hello' }, name ? `안녕, ${name}! ${hello}` : `안녕! ${hello}`),
     chips.length ? h('div', { class: 'chips' }, chips) : h('div', { style: 'height:12px' }),
     h('article', { class: 'card' },
-      h('p', { class: 'eyebrow' }, `${count + 1}번째 계단 · ${topicLabel(v)}`),
+      h('p', { class: 'eyebrow' }, `${count + 1}번째 말씀 · ${topicLabel(v)}`),
       h('h2', { class: 'ref' }, v.refLong),
       h('p', { class: 'verse' }, v.text),
       v.excerpt ? h('p', { class: 'excerpt' }, `말씀 일부: ${v.excerptNote}`) : null,
@@ -559,12 +559,12 @@ function celebrate(app, v) {
       h('button', { type: 'button', class: 'link', style: 'margin-top:8px', onclick: undo }, '잘못 눌렀어요'),
     );
   } else {
-    title.textContent = '계단 올라왔어요!';
-    const lines = [`${v.refLong}${eulReul(v.refLong)} 외웠어요`, `${f.name} 보석까지 ${gem.n - gem.got}구절 남았어요`];
+    title.textContent = '잘 외웠어요!';
+    const lines = [`${v.refLong}${eulReul(v.refLong)} 마음에 담았어요`, `${f.name}까지 ${gem.n - gem.got}구절 남았어요`];
     if (streak >= 2) lines.push(`🔥 ${streak}일 연속이에요`);
     inner.append(
       h('div', { class: 'grow' }),
-      art('climb'),
+      h('div', { class: 'gem-burst', style: `--g:${f.color}` }, G.gemArt(f, gem.got / gem.n, 112, { animate: true })),
       h('p', { class: 'big-num pop', 'aria-hidden': 'true' }, String(n)),
       h('p', { class: 'sr-only' }, `${n}번째`),
       title,
@@ -906,7 +906,7 @@ export function settings(app, _id, query) {
     if (c) {
       codeBox.append(
         h('p', { class: 'code-big' }, c),
-        h('p', { class: 'help' }, '다른 기기에서 이 코드를 넣으면 계단이 이어져요. 꼭 적어 두세요.'),
+        h('p', { class: 'help' }, '다른 기기에서 이 코드를 넣으면 외운 말씀이 이어져요. 꼭 적어 두세요.'),
         h('button', {
           type: 'button',
           class: 'text-btn',
@@ -914,7 +914,7 @@ export function settings(app, _id, query) {
           onclick: async () => {
             try {
               await navigator.clipboard.writeText(c);
-              toast('계단 코드를 복사했어요');
+              toast('코드를 복사했어요');
             } catch (e) {
               toast('복사하지 못했어요. 코드를 적어 두세요');
             }
@@ -923,8 +923,8 @@ export function settings(app, _id, query) {
       );
     } else {
       codeBox.append(h('p', { class: 'help', style: 'margin-top:0' }, st.hasServer
-        ? '첫 계단을 오르면 계단 코드가 만들어져요.'
-        : '아직 서버가 연결되지 않아 이 기기에만 저장돼요. 연결되면 계단 코드가 생겨요.'));
+        ? '첫 말씀을 외우면 내 코드가 만들어져요.'
+        : '아직 서버가 연결되지 않아 이 기기에만 저장돼요. 연결되면 내 코드가 생겨요.'));
     }
   }
 
@@ -973,7 +973,7 @@ export function settings(app, _id, query) {
     restoreMsg.textContent = '불러오는 중…';
     try {
       await P.restore(typed);
-      restoreMsg.textContent = `불러왔어요! 지금 ${P.doneCount()}계단이에요.`;
+      restoreMsg.textContent = `불러왔어요! 지금 ${P.doneCount()}구절 외웠어요.`;
       restoreInput.value = '';
       nameInput.value = P.nickname();
     } catch (e) {
@@ -1032,11 +1032,11 @@ export function settings(app, _id, query) {
         h('p', { class: 'help', style: 'margin-top:0' }, '진짜 이름 대신 별명도 좋아요.'),
       ),
     ),
-    h('section', { class: 'section' }, h('h2', null, '내 계단 코드'), h('div', { class: 'card' }, codeBox)),
+    h('section', { class: 'section' }, h('h2', null, '내 코드'), h('div', { class: 'card' }, codeBox)),
     h('section', { class: 'section', id: 'restore-section' },
       h('h2', null, h('label', { for: 'restore' }, '다른 기기에서 이어 하기')),
       h('div', { class: 'card' },
-        h('p', { class: 'help', style: 'margin-top:0' }, '쓰던 계단 코드를 넣으면 이 기기의 기록과 합쳐져요.'),
+        h('p', { class: 'help', style: 'margin-top:0' }, '쓰던 코드를 넣으면 이 기기의 기록과 합쳐져요.'),
         h('div', { class: 'input-row' }, restoreInput, restoreBtn),
         restoreMsg,
       ),
@@ -1100,9 +1100,9 @@ export function welcome(app) {
     if (e.key === 'Enter') start();
   });
   const root = h('div', { class: 'welcome' },
-    h('div', { class: 'welcome-mark' }, icon('stairs')),
-    h('h1', { class: 'title', tabindex: '-1' }, '말씀 100계단'),
-    h('p', { class: 'sub', style: 'margin-top:8px;font-size:20px;line-height:1.6' }, '하루에 한 구절씩 외우며', h('br'), '꼭대기까지 올라가요.'),
+    h('div', { class: 'welcome-mark' }, icon('gem')),
+    h('h1', { class: 'title', tabindex: '-1' }, '말씀 보석 100'),
+    h('p', { class: 'sub', style: 'margin-top:8px;font-size:20px;line-height:1.6' }, '하루에 한 구절씩 외우며', h('br'), '열두 보석을 빛내요.'),
     installHint({ closable: false }),
     h('label', { class: 'field', style: 'margin-top:40px' },
       h('span', { class: 'field-label' }, '뭐라고 불러 줄까요?'),
@@ -1121,7 +1121,7 @@ export function welcome(app) {
         P.setWelcomed();
         app.go('#/settings?restore', { replace: true });
       },
-    }, '다른 기기에서 쓰던 계단 코드가 있어요'),
+    }, '다른 기기에서 쓰던 코드가 있어요'),
   );
   return { el: root, title: '시작하기' };
 }

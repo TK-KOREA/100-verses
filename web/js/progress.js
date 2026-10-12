@@ -80,7 +80,7 @@ function persist() {
 export const isDone = (id) => !!marks[id]?.done;
 export const doneAt = (id) => (marks[id]?.done ? marks[id].at : '');
 
-/** 외운 구절을 외운 순서대로. 계단은 이 순서대로 아래부터 채운다. */
+/** 외운 구절을 외운 순서대로. */
 export function doneList() {
   return Object.entries(marks)
     .filter(([, m]) => m.done)
@@ -226,7 +226,7 @@ export function sync() {
 
 async function syncOnce() {
   if (!profile.code) {
-    // 보낼 것이 생겼을 때만 계단 코드를 만든다(열어 보기만 한 기기나 코드로 불러올 기기에 빈 코드가 생기지 않게).
+    // 보낼 것이 생겼을 때만 코드를 만든다(열어 보기만 한 기기나 코드로 불러올 기기에 빈 코드가 생기지 않게).
     if (!outbox.length && !profile.nameDirty && !Object.keys(marks).length) return;
     if (!profile.registerRid) {
       profile.registerRid = randomId(20);
@@ -273,7 +273,7 @@ function requeueAll() {
 }
 
 /**
- * 다른 기기의 계단 코드로 불러오기. 두 기기의 기록을 합친다(구절마다 늦은 기록).
+ * 다른 기기의 코드로 불러오기. 두 기기의 기록을 합친다(구절마다 늦은 기록).
  * 이 기기에만 있는 기록은 그 코드로 다시 보낸다.
  */
 export async function restore(typed) {

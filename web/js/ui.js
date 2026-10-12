@@ -38,19 +38,6 @@ export function icon(name) {
   return t.content.firstChild;
 }
 
-// 그림(축하)도 고정 SVG.
-export function art(name) {
-  const t = document.createElement('template');
-  if (name === 'climb') {
-    t.innerHTML = `<svg width="200" height="150" viewBox="0 0 200 150" aria-hidden="true">
-      <path d="M10 140 H60 V110 H100 V80 H140 V50 H190" fill="none" stroke="var(--accent)" stroke-width="10" stroke-linejoin="round" stroke-linecap="round"/>
-      <g><circle cx="120" cy="34" r="12" fill="var(--text)"/><rect x="111" y="48" width="18" height="32" rx="9" fill="var(--text)"/></g>
-      <path d="M150 20 l6 -12 M164 30 l12 -6 M160 14 l6 -6" stroke="var(--accent)" stroke-width="4" stroke-linecap="round"/>
-    </svg>`;
-  }
-  return t.content.firstChild;
-}
-
 let toastTimer = null;
 /** 아래쪽 알림. action = {label, run} 이면 버튼을 하나 붙인다. */
 export function toast(text, action) {
