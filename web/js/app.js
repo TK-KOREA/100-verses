@@ -95,7 +95,7 @@ function paintTabs(activeKey) {
 
 let signature = '';
 // 날짜도 넣는다: 자정이 지나면 "오늘은 다 했어요"가 새 오늘의 구절로 바뀌어야 한다.
-const sig = () => JSON.stringify([P.doneList(), P.nickname(), P.kstToday()]);
+const sig = () => JSON.stringify([P.doneList(), P.round(), P.nickname(), P.kstToday()]);
 
 function render({ keepScroll = false, first = false } = {}) {
   const r = parse(location.hash);

@@ -24,7 +24,9 @@ function table_(name) {
   var last = sh.getLastRow();
   var rows = [];
   if (last >= 2) {
-    var values = sh.getRange(2, 1, last - 1, cols.length).getValues();
+    // 나중에 더한 열이 아직 시트에 없으면 있는 열까지만 읽는다(없는 칸은 빈 값).
+    var width = Math.min(cols.length, sh.getMaxColumns());
+    var values = sh.getRange(2, 1, last - 1, width).getValues();
     for (var i = 0; i < values.length; i++) {
       var obj = { _row: i + 2 };
       for (var c = 0; c < cols.length; c++) obj[cols[c][0]] = readCell_(values[i][c], cols[c][1]);
@@ -56,6 +58,9 @@ function appendRows_(name, objs) {
   if (!objs.length) return;
   var sh = sheet_(name);
   var cols = SCHEMA[name];
+  // 나중에 더한 열(marks의 round)은 setupAll을 다시 돌리지 않아도 처음 쓸 때 머리글을 붙인다.
+  if (sh.getMaxColumns() < cols.length) sh.insertColumnsAfter(sh.getMaxColumns(), cols.length - sh.getMaxColumns());
+  if (sh.getRange(1, cols.length).getValue() === '') writeHead_(sh, name);
   var start = sh.getLastRow() + 1;
   var need = start + objs.length - 1 - sh.getMaxRows();
   if (need > 0) sh.insertRowsAfter(sh.getMaxRows(), need);

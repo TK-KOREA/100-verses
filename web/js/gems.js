@@ -21,6 +21,10 @@ export const FOUNDS = [
 
 export const ORD = ['첫째', '둘째', '셋째', '넷째', '다섯째', '여섯째', '일곱째', '여덟째', '아홉째', '열째', '열한째', '열두째'];
 
+const ROUND_ORD = ['첫', '두', '세', '네', '다섯', '여섯', '일곱', '여덟', '아홉', '열'];
+/** 바퀴 이름: 2 → "두 번째 바퀴" */
+export const roundName = (r) => (ROUND_ORD[r - 1] ? `${ROUND_ORD[r - 1]} 번째 바퀴` : `${r}번째 바퀴`);
+
 /** 말씀 주머니: 이럴 때 꺼내는 말씀. 내가 외운 구절만 보여 준다. */
 export const SITUATIONS = [
   { key: 'scared', emoji: '😨', label: '무서울 때', ids: [7, 8, 12, 37, 61] },
@@ -40,11 +44,17 @@ export function currentFoundNo() {
   return FOUNDS.length;
 }
 
-/** 외운 순서가 아니라 구절 번호로 센다(목록에서 앞 구절을 먼저 외워도 맞게). */
+/**
+ * 외운 순서가 아니라 구절 번호로 센다(목록에서 앞 구절을 먼저 외워도 맞게).
+ * got·full은 이번 바퀴, stars는 이 보석을 다 외운 바퀴 수.
+ */
 export function gemStat(f) {
   const n = f.to - f.from + 1;
-  const got = foundIds(f).filter(P.isDone).length;
-  return { n, got, full: got === n };
+  const ids = foundIds(f);
+  const got = ids.filter(P.isDone).length;
+  let stars = 0;
+  for (let r = 1; r <= P.round(); r++) if (ids.every((id) => P.isDoneIn(id, r))) stars++;
+  return { n, got, full: got === n, stars };
 }
 
 /** 이/가 */
@@ -58,10 +68,14 @@ function svg(tag, attrs) {
 }
 
 let uid = 0;
+const UNDER = 0.3; // 앞 바퀴 색을 까는 진하기
 const GEM = '10,2 30,2 38,12 20,34 2,12';
 
-/** 아래부터 차오르는 보석 하나. fill: 0~1 */
-export function gemArt(f, fill, width = 44, { animate = false } = {}) {
+/**
+ * 아래부터 차오르는 보석 하나. fill: 0~1
+ * under: 2바퀴부터 앞 바퀴의 색을 흐리게 깔아 둔다(보석을 비우지 않고 그 위에 다시 밝게 찬다).
+ */
+export function gemArt(f, fill, width = 44, { animate = false, under = false } = {}) {
   const id = 'gem' + ++uid;
   const s = svg('svg', { viewBox: '0 0 40 36', width, height: Math.round(width * 0.9), 'aria-hidden': 'true', class: 'gem-art' });
   const clip = svg('clipPath', { id });
@@ -69,10 +83,12 @@ export function gemArt(f, fill, width = 44, { animate = false } = {}) {
   const defs = svg('defs', {});
   defs.append(clip);
   s.append(defs);
+  const lit = fill > 0 || under;
   s.append(svg('polygon', {
     points: GEM, fill: 'var(--surface-2)', 'stroke-width': 1.6, 'stroke-linejoin': 'round',
-    stroke: fill > 0 ? f.color : 'var(--line-strong)', 'stroke-dasharray': fill > 0 ? null : '3 2',
+    stroke: lit ? f.color : 'var(--line-strong)', 'stroke-dasharray': lit ? null : '3 2',
   }));
+  if (under) s.append(svg('polygon', { points: GEM, fill: f.color, opacity: UNDER }));
   // 움직임은 안쪽 묶음에 건다. 바깥 묶음에 CSS clip-path를 걸면 차오른 높이(clip-path 속성)를 덮어쓴다.
   const body = svg('g', { 'clip-path': `url(#${id})` });
   const fillG = svg('g', { class: animate ? 'gem-fill' : null });
@@ -99,15 +115,19 @@ export function gemRing({ cur = 0, sel = 0, onPick = null, count = null } = {}) 
     return `M${f1(x0)} ${f1(y0)}L${f1(x1)} ${f1(y1)}A${rb} ${rb} 0 0 1 ${f1(x2)} ${f1(y2)}L${f1(x3)} ${f1(y3)}A${ra} ${ra} 0 0 0 ${f1(x0)} ${f1(y0)}Z`;
   };
   const total = count ?? P.doneCount();
-  const root = svg('svg', { viewBox: '0 0 340 330', class: 'gem-ring', role: onPick ? 'group' : 'img', 'aria-label': `열두 보석, 100구절 중 ${total}구절` });
+  const round = P.round();
+  const roundLabel = round > 1 ? `${roundName(round)}, ` : '';
+  const root = svg('svg', { viewBox: '0 0 340 330', class: 'gem-ring', role: onPick ? 'group' : 'img', 'aria-label': `열두 보석, ${roundLabel}100구절 중 ${total}구절` });
   FOUNDS.forEach((f, i) => {
     const st = gemStat(f), a0 = i * 30 + gap, a1 = (i + 1) * 30 - gap;
     const g = svg('g', { class: 'ring-part' });
     g.append(svg('path', { d: sector(r0, r1, a0, a1), fill: 'var(--step-todo)' }));
+    if (round > 1) g.append(svg('path', { d: sector(r0, r1, a0, a1), fill: f.color, opacity: UNDER }));
     if (st.got) g.append(svg('path', { d: sector(r0, r0 + ((r1 - r0) * st.got) / st.n, a0, a1), fill: f.color }));
-    if (st.full) {
-      const [sx, sy] = pt(r1 - 14, i * 30 + 15);
-      g.append(svg('path', { d: `M${f1(sx)} ${f1(sy - 7)}l1.7 4.3 4.3 1.7-4.3 1.7-1.7 4.3-1.7-4.3-4.3-1.7 4.3-1.7Z`, fill: '#fff', opacity: '.9' }));
+    // ✦ 하나가 이 보석을 다 외운 바퀴 하나. 셋까지 그린다.
+    for (let k = 0; k < Math.min(st.stars, 3); k++) {
+      const [sx, sy] = pt(r1 - 14 - k * 17, i * 30 + 15);
+      g.append(svg('path', { d: `M${f1(sx)} ${f1(sy - 7)}l1.7 4.3 4.3 1.7-4.3 1.7-1.7 4.3-1.7-4.3-4.3-1.7 4.3-1.7Z`, fill: '#fff', stroke: f.color, 'stroke-width': 1.2, 'paint-order': 'stroke' }));
     }
     if (f.no === sel && f.no !== cur) g.append(svg('path', { d: sector(r0, r1, a0, a1), fill: 'none', stroke: 'var(--text)', 'stroke-width': 3 }));
     if (f.no === cur) g.append(svg('path', { d: sector(r0, r1, a0, a1), fill: 'none', stroke: 'var(--accent)', 'stroke-width': 3 }));
@@ -121,7 +141,7 @@ export function gemRing({ cur = 0, sel = 0, onPick = null, count = null } = {}) 
     if (onPick) {
       g.setAttribute('role', 'button');
       g.setAttribute('tabindex', '0');
-      g.setAttribute('aria-label', `${ORD[i]} 보석 ${f.name}, ${st.n}구절 중 ${st.got}구절`);
+      g.setAttribute('aria-label', `${ORD[i]} 보석 ${f.name}, ${st.n}구절 중 ${st.got}구절` + (st.stars > 1 ? `, ${st.stars}번 다 외움` : ''));
       if (f.no === sel) g.setAttribute('aria-pressed', 'true');
       g.addEventListener('click', () => onPick(f.no));
       g.addEventListener('keydown', (e) => {
@@ -138,13 +158,18 @@ export function gemRing({ cur = 0, sel = 0, onPick = null, count = null } = {}) 
   const small = svg('text', { x: cx, y: cy + 32, 'text-anchor': 'middle', 'font-size': 15, 'font-weight': 800, fill: 'var(--text-2)', 'aria-hidden': 'true' });
   small.textContent = '/ 100';
   root.append(big, small);
+  if (round > 1) {
+    const top = svg('text', { x: cx, y: cy - 32, 'text-anchor': 'middle', 'font-size': 13, 'font-weight': 800, fill: 'var(--text-2)', 'aria-hidden': 'true' });
+    top.textContent = roundName(round);
+    root.append(top);
+  }
   return root;
 }
 
 /** 말씀 주머니 단추 여섯 개 */
 export function pocketGrid(app) {
   return h('div', { class: 'pocket' }, SITUATIONS.map((s) => {
-    const n = s.ids.filter(P.isDone).length;
+    const n = s.ids.filter(P.isLearned).length;
     return h('button', {
       type: 'button',
       class: n ? '' : 'none',

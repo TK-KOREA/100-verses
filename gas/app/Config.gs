@@ -19,11 +19,13 @@ var SCHEMA = {
     ['action', 's'],      // 외움 | 취소
     ['at', 's'],          // 아이가 누른 때(기기 시각, KST)
     ['saved_at', 's'],    // 서버에 들어온 때
-    ['request_id', 's']
+    ['request_id', 's'],
+    ['round', 'n']        // 몇 번째 바퀴(2026-10-13에 더함). 비어 있는 옛 기록은 1바퀴
   ]
 };
 
 var VERSE_COUNT = 100;
+var ROUND_MAX = 99;
 
 var ACTION_LABEL = { done: '외움', undo: '취소' };
 

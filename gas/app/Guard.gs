@@ -109,5 +109,13 @@ function mark_(m, now) {
   var id = Number(m.verse_id);
   if (!(id >= 1 && id <= VERSE_COUNT && Math.floor(id) === id)) fail_('INVALID', 'verse_id');
   if (!ACTION_LABEL[m.action]) fail_('INVALID', 'action');
-  return { verse_id: id, action: m.action, at: at_(m.at, now), request_id: requestId_(m.request_id) };
+  return { verse_id: id, action: m.action, at: at_(m.at, now), request_id: requestId_(m.request_id), round: round_(m.round) };
+}
+
+/** 바퀴 번호. 없으면 1(바퀴를 모르는 옛 화면이 보낸 기록). */
+function round_(v) {
+  if (v == null || v === '') return 1;
+  var r = Number(v);
+  if (!(r >= 1 && r <= ROUND_MAX && Math.floor(r) === r)) fail_('INVALID', 'round');
+  return r;
 }

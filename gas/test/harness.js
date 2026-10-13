@@ -48,6 +48,9 @@ function store(v) {
 function makeRange(sh, r, c, nr, nc) {
   if (r + nr - 1 > sh.rows) throw new Error(`range past max rows: ${sh.name} ${r}+${nr} > ${sh.rows}`);
   const range = {
+    getValue() {
+      return range.getValues()[0][0];
+    },
     getValues() {
       const out = [];
       for (let i = 0; i < nr; i++) {

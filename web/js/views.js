@@ -150,7 +150,9 @@ function speakButton(v, iconOnly = false) {
   return btn;
 }
 
-/** 오늘(KST) 외운 구절. 외운 순서대로. */
+/** 같은 구절이 바퀴마다 따로 들어 있으면 하나만 둔다. */
+const oncePerVerse = (list) => list.filter((m, i) => list.findIndex((x) => x.id === m.id) === i);
+
 /** 오늘보다 앞선 날 가운데 가장 최근에 외운 날의 구절들. {label, list} 또는 null */
 function lastDayDone() {
   const t = P.kstToday();
@@ -159,13 +161,28 @@ function lastDayDone() {
   const day = before.reduce((a, m) => (m.at.slice(0, 10) > a ? m.at.slice(0, 10) : a), '');
   return {
     label: day === P.addDays(t, -1) ? '어제 외운 말씀' : '지난번 외운 말씀',
-    list: before.filter((m) => m.at.slice(0, 10) === day),
+    list: oncePerVerse(before.filter((m) => m.at.slice(0, 10) === day)),
   };
 }
 
+/** 오늘(KST) 외운 구절. 외운 순서대로. */
 function doneToday() {
   const t = P.kstToday();
-  return P.doneList().filter((m) => m.at.slice(0, 10) === t);
+  return oncePerVerse(P.doneList().filter((m) => m.at.slice(0, 10) === t));
+}
+
+/** 다음 바퀴 시작하기. 100구절을 다 외웠을 때만 보인다. */
+function nextRoundButton(app, cls) {
+  const next = G.roundName(P.round() + 1);
+  return h('button', {
+    type: 'button',
+    class: cls,
+    onclick: () => {
+      if (!P.startNextRound()) return;
+      toast(`${next}를 시작했어요`);
+      app.go('#/');
+    },
+  }, `${next} 시작하기`);
 }
 
 // ---------- 홈 화면 추가 안내 ----------
@@ -221,19 +238,22 @@ export function today(app) {
   const streak = P.streak();
   const nextId = P.nextVerseId(app.verses);
   const name = P.nickname();
+  const round = P.round();
   const root = h('div', { class: 'today' });
 
   if (nextId == null) {
+    // 이번 바퀴를 다 외웠다. 다음 바퀴는 아이가 눌러서 시작한다.
     root.append(
       h('h1', { class: 'sr-only', tabindex: '-1' }, '오늘'),
       h('div', { style: 'text-align:center;margin-top:16px' },
         h('div', { class: 'ring-box all' }, G.gemRing()),
-        h('h2', { class: 'title', style: 'margin-top:8px' }, '열두 보석이 모두 빛나요!'),
-        h('p', { class: 'sub', style: 'margin-top:12px;font-size:20px' }, '100구절을 모두 마음에 담았어요.'),
+        h('h2', { class: 'title', style: 'margin-top:8px' }, round > 1 ? `${G.roundName(round)}를 다 돌았어요!` : '열두 보석이 모두 빛나요!'),
+        h('p', { class: 'sub', style: 'margin-top:12px;font-size:20px' }, round > 1 ? '100구절을 한 번 더 마음에 담았어요.' : '100구절을 모두 마음에 담았어요.'),
+        h('p', { class: 'sub', style: 'margin-top:8px' }, '1번부터 다시 외우면 보석이 더 밝게 빛나요.'),
       ),
       h('div', { class: 'actions stack' },
-        h('button', { type: 'button', class: 'btn primary', onclick: () => app.go('#/word') }, '내 말씀 보기'),
-        h('button', { type: 'button', class: 'btn secondary small', onclick: () => app.go('#/list') }, '모든 구절 다시 보기'),
+        nextRoundButton(app, 'btn primary'),
+        h('button', { type: 'button', class: 'btn secondary small', onclick: () => app.go('#/word') }, '내 말씀 보기'),
       ),
     );
     return { el: root, title: '오늘' };
@@ -241,7 +261,8 @@ export function today(app) {
 
   const chipsNow = () => {
     const c = [];
-    if (count > 0) c.push(h('span', { class: 'chip accent' }, `외운 말씀 ${count}개`));
+    if (round > 1) c.push(h('span', { class: 'chip accent' }, count ? `${G.roundName(round)} · ${count}개` : G.roundName(round)));
+    else if (count > 0) c.push(h('span', { class: 'chip accent' }, `외운 말씀 ${count}개`));
     if (streak >= 2) c.push(h('span', { class: 'chip' }, `🔥 ${streak}일 연속`));
     return c;
   };
@@ -276,7 +297,9 @@ export function today(app) {
   }
 
   const v = app.byId[nextId];
-  const hello = count === 0 ? '첫 말씀을 외워 볼까요?' : '오늘도 한 구절 외워요';
+  const hello = round > 1
+    ? (count === 0 ? `${G.roundName(round)}예요. 1번부터 다시 외워요` : '오늘도 한 구절 다시 외워요')
+    : (count === 0 ? '첫 말씀을 외워 볼까요?' : '오늘도 한 구절 외워요');
   const chips = chipsNow();
 
   root.append(...[
@@ -305,7 +328,8 @@ const FIRST = /^([^\p{L}\p{N}]*)([\p{L}\p{N}])(.*)$/u;
 export function verse(app, id) {
   const v = app.byId[id];
   if (!v) return notFound(app);
-  let stage = 1;
+  // 2바퀴부터는 이미 외운 말씀이라 4단계(혼자)에서 연다. 막히면 단계 표시로 앞 단계에 간다.
+  let stage = P.round() > 1 ? 4 : 1;
   let lastDone = null;
   // 두 번 누름 막기: 아래 버튼이 바뀐 직후 0.25초 동안은 누름을 받지 않는다.
   // (안 막으면 "다음 단계"를 두 번 눌러 한 단계를 건너뛰거나, 4단계의 "처음부터 다시"가 눌린다)
@@ -501,8 +525,12 @@ export function verse(app, id) {
     paintListen();
 
     const done = P.isDone(v.id);
+    const before = P.lastDoneAt(v.id);
     lastDone = done;
     doneNote.replaceChildren();
+    if (!done && before) {
+      doneNote.append(h('span', null, `지난 바퀴에 ${P.dateLabel(before)} 외웠어요`));
+    }
     if (done) {
       doneNote.append(
         h('span', null, `✓ ${P.dateLabel(P.doneAt(v.id))}에 외웠어요`),
@@ -555,6 +583,7 @@ export function verse(app, id) {
 
 function celebrate(app, v) {
   const n = P.doneCount();
+  const round = P.round();
   const streak = P.streak();
   const next = P.nextVerseId(app.verses);
   const all = next == null;
@@ -574,30 +603,30 @@ function celebrate(app, v) {
   const gem = G.gemStat(f);
   const more = () => app.go('#/verse/' + next, { replace: true });
   if (all) {
-    title.textContent = '열두 보석이 모두 빛나요!';
+    title.textContent = round > 1 ? `${G.roundName(round)}를 다 돌았어요!` : '열두 보석이 모두 빛나요!';
     inner.append(
       h('div', { class: 'grow' }),
       h('div', { class: 'ring-box all pop' }, G.gemRing()),
       h('p', { class: 'eyebrow', style: 'margin-top:12px;font-size:18px' }, '100번째 구절'),
       title,
-      h('p', { class: 'sub', style: 'font-size:20px;margin-top:16px;line-height:1.6' }, '100구절을 모두 마음에 담았어요.', h('br'), '정말 잘했어요.'),
+      h('p', { class: 'sub', style: 'font-size:20px;margin-top:16px;line-height:1.6' }, round > 1 ? '100구절을 한 번 더 마음에 담았어요.' : '100구절을 모두 마음에 담았어요.', h('br'), '정말 잘했어요.'),
       h('div', { class: 'grow' }),
       h('div', { class: 'stack' },
         h('button', { type: 'button', class: 'btn primary', onclick: () => app.go('#/word') }, '내 말씀 보기'),
-        h('button', { type: 'button', class: 'btn secondary small', onclick: () => app.go('#/') }, '처음 화면으로'),
+        nextRoundButton(app, 'btn secondary small'),
       ),
       h('button', { type: 'button', class: 'link', style: 'margin-top:8px', onclick: undo }, '잘못 눌렀어요'),
     );
   } else if (gem.full) {
     // 이 구절로 보석 하나(묶음)를 다 외웠다. 보석빛 테마는 축하하는 동안 방금 채운 보석 색을 두고, 닫으면 다음 보석 색으로 바뀐다.
     document.documentElement.dataset.gem = String(f.no);
-    title.textContent = `${f.name}${G.iGa(f.name)} 모두 빛나요!`;
-    const lines = [`${f.what} 말씀 ${gem.n}구절을`, '다 마음에 담았어요.'];
+    title.textContent = round > 1 ? `${f.name}${G.iGa(f.name)} 더 밝게 빛나요!` : `${f.name}${G.iGa(f.name)} 모두 빛나요!`;
+    const lines = [`${f.what} 말씀 ${gem.n}구절을`, round > 1 ? '한 번 더 마음에 담았어요.' : '다 마음에 담았어요.'];
     if (streak >= 2) lines.push(`🔥 ${streak}일 연속이에요`);
     inner.append(
       h('div', { class: 'grow' }),
       h('div', { class: 'gem-burst', style: `--g:${f.color}` }, G.gemArt(f, 1, 132, { animate: true })),
-      h('p', { class: 'eyebrow', style: 'margin-top:24px;font-size:18px' }, `${G.ORD[f.no - 1]} 보석`),
+      h('p', { class: 'eyebrow', style: 'margin-top:24px;font-size:18px' }, `${G.ORD[f.no - 1]} 보석` + (round > 1 ? ` · ${G.roundName(round)}` : '')),
       title,
       h('p', { class: 'sub', style: 'font-size:20px;margin-top:12px;line-height:1.6' }, lines.flatMap((l, i) => (i ? [h('br'), l] : [l]))),
       h('div', { class: 'ring-box mini' }, G.gemRing({ cur: next != null ? G.foundOf(next).no : 0, sel: f.no })),
@@ -610,11 +639,11 @@ function celebrate(app, v) {
     );
   } else {
     title.textContent = '잘 외웠어요!';
-    const lines = [`${v.refLong}${eulReul(v.refLong)} 마음에 담았어요`, `${f.name}까지 ${gem.n - gem.got}구절 남았어요`];
+    const lines = [`${v.refLong}${eulReul(v.refLong)} ${round > 1 ? '다시 ' : ''}마음에 담았어요`, `${f.name}까지 ${gem.n - gem.got}구절 남았어요`];
     if (streak >= 2) lines.push(`🔥 ${streak}일 연속이에요`);
     inner.append(
       h('div', { class: 'grow' }),
-      h('div', { class: 'gem-burst', style: `--g:${f.color}` }, G.gemArt(f, gem.got / gem.n, 112, { animate: true })),
+      h('div', { class: 'gem-burst', style: `--g:${f.color}` }, G.gemArt(f, gem.got / gem.n, 112, { animate: true, under: round > 1 })),
       h('p', { class: 'big-num pop', 'aria-hidden': 'true' }, String(n)),
       h('p', { class: 'sr-only' }, `${n}번째`),
       title,
@@ -658,16 +687,20 @@ export function list(app) {
 
   const keep = (v) => (app.listFilter === 'done' ? P.isDone(v.id) : app.listFilter === 'todo' ? !P.isDone(v.id) : true);
 
+  const round = P.round();
   function row(v) {
     const d = P.isDone(v.id);
     const nx = v.id === nextId;
+    // 2바퀴부터는 번호 아래 점으로 외운 바퀴 수를 보여 준다.
+    const times = round > 1 ? P.timesDone(v.id) : 0;
+    const num = h('span', { class: 'num' + (d ? ' done' : nx ? ' next' : ''), 'aria-hidden': 'true' }, String(v.id));
     return h('button', { type: 'button', class: 'row', onclick: () => app.go('#/verse/' + v.id) },
-      h('span', { class: 'num' + (d ? ' done' : nx ? ' next' : ''), 'aria-hidden': 'true' }, String(v.id)),
+      times ? h('span', { class: 'num-col', 'aria-hidden': 'true' }, num, h('span', { class: 'times' }, '●'.repeat(Math.min(times, 5)))) : num,
       h('span', { class: 'row-t' },
         h('b', null, v.ref, v.subtopic ? h('span', { class: 'tag' }, v.subtopic) : null),
         h('p', null, v.text.split('\n')[0])),
       h('span', { class: 'chev', 'aria-hidden': 'true' }, '›'),
-      h('span', { class: 'sr-only' }, d ? ', 외웠어요' : nx ? ', 오늘의 구절' : ''),
+      h('span', { class: 'sr-only' }, (d ? ', 외웠어요' : nx ? ', 오늘의 구절' : '') + (times ? `, ${times}바퀴 외움` : '')),
     );
   }
 
@@ -730,10 +763,10 @@ export function list(app) {
     if (!shown.length) {
       body.append(app.listFilter === 'done'
         ? h('div', { class: 'empty' },
-          h('p', { class: 'empty-t' }, '아직 외운 구절이 없어요'),
+          h('p', { class: 'empty-t' }, round > 1 ? `${G.roundName(round)}에 외운 구절이 아직 없어요` : '아직 외운 구절이 없어요'),
           h('p', { class: 'sub' }, '오늘의 구절부터 올라가 볼까요?'),
           h('button', { type: 'button', class: 'btn primary small', onclick: () => app.go('#/') }, '오늘의 구절 보기'))
-        : h('div', { class: 'empty' }, h('p', { class: 'empty-t' }, '100구절을 모두 외웠어요!')));
+        : h('div', { class: 'empty' }, h('p', { class: 'empty-t' }, round > 1 ? `${G.roundName(round)}에 100구절을 모두 외웠어요!` : '100구절을 모두 외웠어요!')));
       return;
     }
     shown.forEach((g) => {
@@ -862,7 +895,7 @@ export function word(app) {
     card.style.setProperty('--g', f.color);
     card.replaceChildren(...[
       h('div', { class: 'gem-top', tabindex: '-1' },
-        G.gemArt(f, st.got / st.n, 60),
+        G.gemArt(f, st.got / st.n, 60, { under: P.round() > 1 }),
         h('div', null,
           h('p', { class: 'gem-ord' }, `${G.ORD[f.no - 1]} 보석${tag}`),
           h('h3', { class: 'gem-name' }, f.name),
@@ -875,7 +908,8 @@ export function word(app) {
   }
   paint();
 
-  const gemHead = h('h2', { class: 'sec-t' }, '열두 보석', h('small', null, `${P.doneCount()} / 100`));
+  const gemHead = h('h2', { class: 'sec-t' }, '열두 보석',
+    h('small', null, (P.round() > 1 ? `${G.roundName(P.round())} · ` : '') + `${P.doneCount()} / 100`));
   const root = h('div', { class: 'word' },
     h('div', { class: 'head-row' },
       h('h1', { class: 'title', tabindex: '-1' }, '내 말씀'),
@@ -903,8 +937,8 @@ export function word(app) {
 export function pocket(app, key) {
   const s = G.SITUATIONS.find((x) => x.key === key);
   if (!s) return notFound(app);
-  const mine = s.ids.filter(P.isDone).map((id) => app.byId[id]);
-  const later = s.ids.filter((id) => !P.isDone(id)).map((id) => app.byId[id]);
+  const mine = s.ids.filter(P.isLearned).map((id) => app.byId[id]);
+  const later = s.ids.filter((id) => !P.isLearned(id)).map((id) => app.byId[id]);
 
   const root = h('div', { class: 'pocket-page' },
     h('header', { class: 'navbar' },
@@ -1023,7 +1057,9 @@ export function settings(app, _id, query) {
     restoreMsg.textContent = '불러오는 중…';
     try {
       await P.restore(typed);
-      restoreMsg.textContent = `불러왔어요! 지금 ${P.doneCount()}구절 외웠어요.`;
+      restoreMsg.textContent = P.round() > 1
+        ? `불러왔어요! 지금 ${G.roundName(P.round())}에 ${P.doneCount()}구절 외웠어요.`
+        : `불러왔어요! 지금 ${P.doneCount()}구절 외웠어요.`;
       restoreInput.value = '';
       nameInput.value = P.nickname();
     } catch (e) {

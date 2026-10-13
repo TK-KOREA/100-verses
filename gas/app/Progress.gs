@@ -1,6 +1,6 @@
 /**
  * 계단 코드 만들기, 진도 주고받기, 코드로 불러오기.
- * 기록은 지우지 않고 쌓는다. 구절마다 가장 늦은 기록(at, 같으면 saved_at)을 따른다.
+ * 기록은 지우지 않고 쌓는다. 구절·바퀴마다 가장 늦은 기록(at, 같으면 saved_at)을 따른다.
  */
 
 /** POST register {device_id, request_id, nickname?} → {code, nickname, marks: []} */
@@ -22,7 +22,7 @@ function postRegister_(b) {
 }
 
 /**
- * POST sync {code, device_id, marks: [{verse_id, action: done|undo, at, request_id}], nickname?}
+ * POST sync {code, device_id, marks: [{verse_id, action: done|undo, at, request_id, round?}], nickname?}
  * 새 기록을 쌓고 지금 상태를 돌려준다. 이미 받은 request_id는 다시 쌓지 않는다.
  */
 function postSync_(b) {
@@ -48,7 +48,7 @@ function postSync_(b) {
     clean.forEach(function (m) {
       if (seen[m.request_id]) return;
       seen[m.request_id] = true;
-      add.push({ code: code, verse_id: m.verse_id, action: ACTION_LABEL[m.action], at: m.at, saved_at: now, request_id: m.request_id });
+      add.push({ code: code, verse_id: m.verse_id, action: ACTION_LABEL[m.action], at: m.at, saved_at: now, request_id: m.request_id, round: m.round });
     });
     appendRows_('marks', add);
     if (add.length || nameChanged) {
@@ -79,17 +79,18 @@ function findChild_(code) {
   return null;
 }
 
-/** 구절마다 가장 늦은 기록 하나. marks = [{verse_id, done, at}] (at 순) */
+/** 구절·바퀴마다 가장 늦은 기록 하나. marks = [{verse_id, round, done, at}] (at 순) */
 function state_(child) {
   var latest = {};
   table_('marks').forEach(function (r) {
     if (r.code !== child.code) return;
-    var cur = latest[r.verse_id];
-    if (!cur || r.at > cur.at || (r.at === cur.at && r.saved_at >= cur.saved_at)) latest[r.verse_id] = r;
+    var key = r.verse_id + '.' + (r.round || 1);
+    var cur = latest[key];
+    if (!cur || r.at > cur.at || (r.at === cur.at && r.saved_at >= cur.saved_at)) latest[key] = r;
   });
   var marks = Object.keys(latest).map(function (k) {
     var r = latest[k];
-    return { verse_id: r.verse_id, done: r.action === ACTION_LABEL.done, at: r.at };
+    return { verse_id: r.verse_id, round: r.round || 1, done: r.action === ACTION_LABEL.done, at: r.at };
   });
   marks.sort(function (a, b) { return a.at < b.at ? -1 : a.at > b.at ? 1 : a.verse_id - b.verse_id; });
   return { code: child.code, nickname: child.nickname, marks: marks };

@@ -1,6 +1,6 @@
 // 진도: 기기에 먼저 쓰고, 뒤에서 서버(Apps Script → 구글 시트)와 주고받는다(기획서 "진도 저장").
 // 저장소가 막혀 있어도 화면은 돌아가야 하므로 읽기·쓰기는 모두 try로 감싼다.
-import { API_URL } from './config.js';
+import { API_URL, VERSE_COUNT } from './config.js';
 import { get, post, ApiError } from './api.js';
 
 const P = 'v100_';
@@ -58,8 +58,11 @@ export function dateLabel(at) {
 
 // ---------- 상태 ----------
 
-let marks = load('marks', {}); // {구절 id: {done, at}} 구절마다 마지막 기록
-let outbox = load('outbox', []); // 아직 서버에 못 보낸 기록 [{verse_id, action, at, request_id}]
+// 바퀴: 100구절을 다 외우면 다음 바퀴를 시작해 1번부터 다시 외운다(기획서 "다시 외우기", 2026-10-13).
+// marks: {"구절.바퀴": {done, at}} 구절·바퀴마다 마지막 기록. 그전에는 'marks'({구절: {done, at}}, 1바퀴뿐)에 두었다.
+let marks = loadMarks();
+let outbox = load('outbox', []); // 아직 서버에 못 보낸 기록 [{verse_id, action, at, request_id, round}] (round 없으면 1바퀴)
+let picked = load('round', 1); // 아이가 시작한 바퀴. 기록이 아직 없어도 시작한 바퀴를 기억한다.
 let profile = { code: '', nickname: '', nameDirty: false, registerRid: '', ...load('profile', {}) };
 let sync$ = { state: API_URL ? 'idle' : 'local', at: load('synced_at', ''), error: '' };
 
@@ -71,23 +74,64 @@ export function onChange(fn) {
 function emit() {
   listeners.forEach((fn) => fn());
 }
+function loadMarks() {
+  const now = load('marks2', null);
+  if (now) return now;
+  const out = {};
+  for (const [id, m] of Object.entries(load('marks', {}))) out[id + '.1'] = m;
+  return out;
+}
 function persist() {
-  save('marks', marks);
+  save('marks2', marks);
   save('outbox', outbox);
   save('profile', profile);
 }
 
-export const isDone = (id) => !!marks[id]?.done;
-export const doneAt = (id) => (marks[id]?.done ? marks[id].at : '');
-
-/** 외운 구절을 외운 순서대로. */
-export function doneList() {
-  return Object.entries(marks)
-    .filter(([, m]) => m.done)
-    .map(([id, m]) => ({ id: Number(id), at: m.at }))
-    .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : a.id - b.id));
+const key = (id, r) => id + '.' + r;
+function records() {
+  return Object.entries(marks).map(([k, m]) => {
+    const [id, r] = k.split('.').map(Number);
+    return { id, r, done: m.done, at: m.at };
+  });
 }
-export const doneCount = () => doneList().length;
+
+/** 지금 바퀴: 시작한 바퀴와 기록이 있는 가장 늦은 바퀴 가운데 큰 것. */
+export function round() {
+  return records().reduce((a, m) => Math.max(a, m.r), Math.max(1, Number(picked) || 1));
+}
+
+export const isDoneIn = (id, r) => !!marks[key(id, r)]?.done;
+/** 이번 바퀴에 외웠는지. 오늘의 구절, 목록 거르기, 보석 채우기는 이것으로 센다. */
+export const isDone = (id) => isDoneIn(id, round());
+export const doneAt = (id) => (isDone(id) ? marks[key(id, round())].at : '');
+/** 어느 바퀴에서든 한 번이라도 외웠는지(말씀 주머니). */
+export const isLearned = (id) => records().some((m) => m.id === id && m.done);
+/** 외운 바퀴 수. */
+export const timesDone = (id) => records().filter((m) => m.id === id && m.done).length;
+/** 가장 최근에 외운 때(바퀴 상관없이). */
+export const lastDoneAt = (id) => records().filter((m) => m.id === id && m.done).reduce((a, m) => (m.at > a ? m.at : a), '');
+
+/** 외운 기록을 외운 순서대로(모든 바퀴). 같은 구절이 바퀴마다 따로 들어 있다. */
+export function doneList() {
+  return records()
+    .filter((m) => m.done)
+    .map(({ id, r, at }) => ({ id, r, at }))
+    .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : a.id - b.id || a.r - b.r));
+}
+/** 이번 바퀴에 외운 구절 수. */
+export const doneCount = () => {
+  const r = round();
+  return records().filter((m) => m.r === r && m.done).length;
+};
+
+/** 이번 바퀴를 다 외웠으면 다음 바퀴를 시작한다(100구절을 다 외운 뒤에만). */
+export function startNextRound() {
+  if (doneCount() < VERSE_COUNT) return false;
+  picked = round() + 1;
+  save('round', picked);
+  emit();
+  return true;
+}
 
 /** 오늘의 구절: 번호 순서로 아직 안 외운 첫 구절. 다 외웠으면 null. */
 export function nextVerseId(verses) {
@@ -108,16 +152,17 @@ export function streak() {
   return n;
 }
 
-function enqueue(id, done, at) {
-  outbox.push({ verse_id: id, action: done ? 'done' : 'undo', at, request_id: randomId(20) });
+function enqueue(id, done, at, r) {
+  outbox.push({ verse_id: id, action: done ? 'done' : 'undo', at, request_id: randomId(20), round: r });
 }
 
-/** "외웠어요!"(done=true) 또는 취소(done=false). 기기에 바로 쓰고, 서버로는 뒤에서 보낸다. */
+/** 이번 바퀴의 "외웠어요!"(done=true) 또는 취소(done=false). 기기에 바로 쓰고, 서버로는 뒤에서 보낸다. */
 export function setMark(id, done) {
   if (isDone(id) === done) return;
   const at = kstNow();
-  marks[id] = { done, at };
-  enqueue(id, done, at);
+  const r = round();
+  marks[key(id, r)] = { done, at };
+  enqueue(id, done, at, r);
   persist();
   emit();
   sync();
@@ -155,14 +200,15 @@ export const setWelcomed = () => save('welcomed', true);
 
 // ---------- 서버와 주고받기 ----------
 
-/** 서버 상태를 합친다. 구절마다 더 늦은 기록이 이긴다. */
+/** 서버 상태를 합친다. 구절·바퀴마다 더 늦은 기록이 이긴다. (round가 없는 응답은 옛 서버라 1바퀴) */
 function merge(serverMarks) {
   let changed = false;
   for (const s of serverMarks) {
-    const local = marks[s.verse_id];
+    const k = key(s.verse_id, s.round || 1);
+    const local = marks[k];
     if (!local || s.at > local.at) {
       if (!local || local.done !== s.done || local.at !== s.at) changed = true;
-      marks[s.verse_id] = { done: s.done, at: s.at };
+      marks[k] = { done: s.done, at: s.at };
     }
   }
   return changed;
@@ -265,10 +311,12 @@ async function syncOnce() {
   emit();
 }
 
+const queuedKeys = () => new Set(outbox.map((m) => key(m.verse_id, m.round || 1) + '|' + m.at));
+
 function requeueAll() {
-  const queued = new Set(outbox.map((m) => m.verse_id + '|' + m.at));
-  for (const [id, m] of Object.entries(marks)) {
-    if (!queued.has(id + '|' + m.at)) enqueue(Number(id), m.done, m.at);
+  const queued = queuedKeys();
+  for (const m of records()) {
+    if (!queued.has(key(m.id, m.r) + '|' + m.at)) enqueue(m.id, m.done, m.at, m.r);
   }
 }
 
@@ -279,11 +327,12 @@ function requeueAll() {
 export async function restore(typed) {
   const d = await get('load', { code: typed, device_id: deviceId() });
   const server = {};
-  d.marks.forEach((m) => { server[m.verse_id] = m; });
-  const queued = new Set(outbox.map((m) => m.verse_id + '|' + m.at));
-  for (const [id, m] of Object.entries(marks)) {
-    const s = server[id];
-    if ((!s || m.at > s.at) && !queued.has(id + '|' + m.at)) enqueue(Number(id), m.done, m.at);
+  d.marks.forEach((m) => { server[key(m.verse_id, m.round || 1)] = m; });
+  const queued = queuedKeys();
+  for (const m of records()) {
+    const k = key(m.id, m.r);
+    const s = server[k];
+    if ((!s || m.at > s.at) && !queued.has(k + '|' + m.at)) enqueue(m.id, m.done, m.at, m.r);
   }
   profile.code = d.code;
   profile.registerRid = '';
@@ -302,8 +351,9 @@ export async function restore(typed) {
 if (typeof window !== 'undefined') {
   window.addEventListener('storage', (e) => {
     if (e.key && !e.key.startsWith(P)) return;
-    marks = load('marks', {});
+    marks = loadMarks();
     outbox = load('outbox', []);
+    picked = load('round', 1);
     profile = { code: '', nickname: '', nameDirty: false, registerRid: '', ...load('profile', {}) };
     emit();
   });

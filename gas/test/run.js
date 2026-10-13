@@ -36,15 +36,17 @@ function register(env, extra = {}) {
   ok(r.ok, JSON.stringify(r));
   return r.data;
 }
-function mark(id, action, time) {
-  return { verse_id: id, action, at: at(time), request_id: rid() };
+function mark(id, action, time, round) {
+  const m = { verse_id: id, action, at: at(time), request_id: rid() };
+  if (round != null) m.round = round;
+  return m;
 }
 
 console.log('계단 코드');
 test('setupAll이 탭과 머리글을 만든다', () => {
   const env = fresh();
   eq(env.sheets.children.data[0], ['code', 'nickname', 'created_at', 'updated_at', 'request_id']);
-  eq(env.sheets.marks.data[0], ['code', 'verse_id', 'action', 'at', 'saved_at', 'request_id']);
+  eq(env.sheets.marks.data[0], ['code', 'verse_id', 'action', 'at', 'saved_at', 'request_id', 'round']);
 });
 test('register는 낱말-네 자리 코드를 만든다', () => {
   const env = fresh();
@@ -108,7 +110,7 @@ test('늦게 도착한 옛 기록이 새 기록을 덮지 않는다', () => {
   const { code } = register(env);
   env.post({ action: 'sync', code, device_id: DEV, marks: [mark(7, 'undo', '12:00:00')] });
   const r = env.post({ action: 'sync', code, device_id: DEV, marks: [mark(7, 'done', '11:00:00')] }).data;
-  eq(r.marks, [{ verse_id: 7, done: false, at: at('12:00:00') }]);
+  eq(r.marks, [{ verse_id: 7, round: 1, done: false, at: at('12:00:00') }]);
 });
 test('빈 sync는 쓰지 않고 상태만 준다', () => {
   const env = fresh();
@@ -153,6 +155,40 @@ test('기기 하나가 1분에 20번 넘게 쓰면 RATE_LIMIT, 1분 지나면 �
   eq(env.post({ action: 'sync', code, device_id: DEV, marks: [mark(2, 'done', '09:01:00')] }).error.code, 'RATE_LIMIT');
   env.tick(61 * 1000);
   ok(env.post({ action: 'sync', code, device_id: DEV, marks: [mark(2, 'done', '09:01:00')] }).ok);
+});
+
+console.log('바퀴');
+test('바퀴 없는 기록은 1바퀴로 쌓인다', () => {
+  const env = fresh();
+  const { code } = register(env);
+  const r = env.post({ action: 'sync', code, device_id: DEV, marks: [mark(1, 'done', '09:00:00')] }).data;
+  eq(r.marks, [{ verse_id: 1, round: 1, done: true, at: at('09:00:00') }]);
+  eq(env.sheets.marks.data[1][6], 1);
+});
+test('같은 구절도 바퀴마다 따로 따른다(2바퀴 취소가 1바퀴를 지우지 않음)', () => {
+  const env = fresh();
+  const { code } = register(env);
+  const r = env.post({ action: 'sync', code, device_id: DEV, marks: [
+    mark(1, 'done', '09:00:00'), mark(1, 'done', '10:00:00', 2), mark(1, 'undo', '10:01:00', 2),
+  ] }).data;
+  eq(r.marks.map((m) => [m.verse_id, m.round, m.done]), [[1, 1, true], [1, 2, false]]);
+});
+test('바퀴 번호가 1~99 밖이거나 정수가 아니면 INVALID', () => {
+  const env = fresh();
+  const { code } = register(env);
+  for (const bad of [0, 100, 1.5, 'two']) {
+    eq(env.post({ action: 'sync', code, device_id: DEV, marks: [mark(1, 'done', '09:00:00', bad)] }).error.code, 'INVALID', String(bad));
+  }
+});
+test('round 열이 없던 옛 시트도 처음 쓸 때 머리글을 붙이고, 빈 칸은 1바퀴로 읽는다', () => {
+  const env = fresh();
+  const { code } = register(env);
+  const sh = env.sheets.marks;
+  sh.data[0].length = 6; // 옛 머리글
+  sh.data[1] = ["'" + code, 3, "'외움", "'" + at('08:00:00'), "'" + at('08:00:00'), "'old_request_1"].map((v) => (typeof v === 'string' && v[0] === "'" ? v.slice(1) : v));
+  const r = env.post({ action: 'sync', code, device_id: DEV, marks: [mark(4, 'done', '09:00:00', 2)] }).data;
+  eq(sh.data[0][6], 'round');
+  eq(r.marks.map((m) => [m.verse_id, m.round]), [[3, 1], [4, 2]]);
 });
 
 console.log('계단 코드로 불러오기');
