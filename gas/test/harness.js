@@ -99,6 +99,9 @@ function makeEnv({ realClock = false } = {}) {
   const cache = new Map();
   const props = new Map();
   const mails = [];
+  const triggers = [];
+  const fetches = [];
+  let fetchReply = () => [200, '{}'];
   let clock = Date.parse('2026-10-10T10:00:00+09:00');
 
   function fmt(d, tz, pattern) {
@@ -161,15 +164,26 @@ function makeEnv({ realClock = false } = {}) {
     MailApp: { sendEmail: (to, subject, body) => mails.push({ to, subject, body }) },
     Logger: { log() {} },
     ScriptApp: {
-      getProjectTriggers: () => [],
-      deleteTrigger() {},
+      getOAuthToken: () => 'test_oauth_token',
+      getProjectTriggers: () => triggers.slice(),
+      deleteTrigger(t) { triggers.splice(triggers.indexOf(t), 1); },
       WeekDay: { MONDAY: 'MONDAY' },
-      newTrigger: () => { const t = { timeBased: () => t, onWeekDay: () => t, atHour: () => t, everyDays: () => t, create: () => t }; return t; },
+      newTrigger: (fn) => {
+        const t = { timeBased: () => t, after: () => t, onWeekDay: () => t, atHour: () => t, everyDays: () => t, getHandlerFunction: () => fn, create: () => { triggers.push(t); return t; } };
+        return t;
+      },
+    },
+    UrlFetchApp: {
+      fetch: (url, opt) => {
+        fetches.push({ url, opt });
+        const [code, body] = fetchReply(url, opt);
+        return { getResponseCode: () => code, getContentText: () => body };
+      },
     },
   };
   vm.createContext(ctx);
   const dir = path.join(__dirname, '..', 'app');
-  for (const f of ['Config.gs', 'Store.gs', 'Guard.gs', 'Api.gs', 'Progress.gs', 'Setup.gs']) {
+  for (const f of ['Config.gs', 'Store.gs', 'Guard.gs', 'Api.gs', 'Progress.gs', 'Setup.gs', 'Push.gs']) {
     vm.runInContext(fs.readFileSync(path.join(dir, f), 'utf8'), ctx, { filename: f });
   }
 
@@ -178,7 +192,8 @@ function makeEnv({ realClock = false } = {}) {
     vm.runInContext('tableCache_ = {};', ctx);
   }
   return {
-    ctx, sheets, cache, props, mails,
+    ctx, sheets, cache, props, mails, triggers, fetches,
+    replyFetch(fn) { fetchReply = fn; },
     tick(ms) { clock += ms; },
     get(params) { fresh(); return JSON.parse(ctx.doGet({ parameter: params }).content); },
     post(body) { fresh(); return JSON.parse(ctx.doPost({ postData: { contents: JSON.stringify(body) } }).content); },

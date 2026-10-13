@@ -14,7 +14,8 @@
 | web/ | GitHub Pages로 올리는 화면 (`index.html`, `css/`, `js/`, `sw.js`, `manifest.json`, `icons/`, `data/verses.json`) |
 | gas/app/ | Apps Script 서버. 진도를 구글 시트에 저장 (five-people-garden과 같은 구조) |
 | gas/test/ | Node 흉내 환경: 서버 논리 시험(`run.js`)과 흉내 서버(`server.js`) |
-| design/ | 시안 |
+| web/push0/ | 알림 0단계 시험용 홈 화면 앱(아이들 앱과 따로). 본 기능을 만들면 지운다 |
+| design/ | 시안 (`mockup.html` 앱, `reminders.html` 말씀 알림) |
 | 어린이_암송구절_회복역_최신.json | 구절 원본. `web/data/verses.json`은 이 파일을 그대로 복사한 것 |
 
 ## 진도 저장
@@ -35,6 +36,14 @@
 3. 배포 → 새 배포 → 웹 앱(실행: 나, 액세스: 모든 사용자). 나온 `/exec` 주소를 `web/js/config.js`의 `PROD_API`에 넣는다.
 
 코드를 고친 뒤에는 `clasp push` 하고 `clasp create-deployment -i <배포 id> -d "…"`로 같은 주소를 유지한다. 배포 id는 `web/js/config.js` 주소의 `/s/` 뒤 값이다. 화면 파일을 바꾸면 `web/sw.js`의 `VERSION`을 올린다.
+
+## 알림 0단계
+
+말씀 알림은 Apps Script → Firebase Cloud Messaging(FCM) → 기기로 보낸다. 본 기능 전에 `web/push0/` 시험 앱으로 실제 기기에 오는지 확인한다.
+
+1. Firebase 프로젝트(TK 계정)에서 웹 앱을 등록하고 웹 푸시 인증서(키 쌍)를 만든다. 설정 값과 VAPID 공개 키를 `web/push0/firebase-config.js`에, 프로젝트 id를 `gas/app/Config.gs`의 `FCM_PROJECT_ID`에 넣는다(모두 공개 값).
+2. `appsscript.json`에 `oauthScopes`를 적어 두었다(Firebase 범위는 자동으로 찾지 않는다). 쓰는 서비스가 늘면 여기에도 더한다. `clasp push` 뒤 편집기에서 `authorizePush`를 한 번 실행해 권한을 허용하고 나서 새 버전을 배포한다(허용 전에 배포하면 서버가 멈춘다).
+3. 아이폰은 Safari로 `https://tk-korea.github.io/100-verses/push0/`를 열어 홈 화면에 추가하고 그 아이콘으로 연다. "알림 허용하고 준비하기" → "지금 보내기" → "1분 뒤 보내기"(누르고 앱을 닫고 화면 끄기) → 알림을 눌러 앱이 열리는지 본다.
 
 ## 내 컴퓨터에서 시험
 

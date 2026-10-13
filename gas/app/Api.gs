@@ -8,7 +8,7 @@ function getActions_() {
 }
 
 function postActions_() {
-  return { register: postRegister_, sync: postSync_ };
+  return { register: postRegister_, sync: postSync_, push0: postPush0_ };
 }
 
 function doGet(e) {

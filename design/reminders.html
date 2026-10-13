@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>말씀 알림 시안</title>
+<style>
+/* 앱 토큰(web/css/style.css 기본 테마와 같음) */
+:root {
+  --bg: #FAF7F2; --surface: #FFFFFF; --surface-2: #F1EBE2; --text: #1E1A16; --text-2: #5C544A;
+  --line: #E3DACD; --line-strong: #8C7F6E; --accent: #C2410C; --accent-on: #FFFFFF; --accent-soft: #FFEADB;
+  --accent-ink: #9A3412; --step-todo: #ECE4D8; --shadow: 0 1px 3px rgba(0, 0, 0, .12);
+  --font: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
+  --board-bg: #E7E3DD; --board-text: #2A2622; --board-text-2: #625A50;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --board-bg: #121110; --board-text: #EDE8E1; --board-text-2: #A69D92; }
+}
+:root[data-theme="dark"] { --board-bg: #121110; --board-text: #EDE8E1; --board-text-2: #A69D92; }
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font); background: var(--board-bg); color: var(--board-text); padding: 40px 16px 80px; -webkit-font-smoothing: antialiased; }
+
+.board-head { max-width: 1240px; margin: 0 auto 40px; }
+.board-head h1 { font-size: 32px; font-weight: 800; letter-spacing: -0.02em; }
+.board-head p { margin-top: 8px; font-size: 17px; color: var(--board-text-2); line-height: 1.6; max-width: 760px; word-break: keep-all; }
+.board { max-width: 1240px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(375px, 100%), 1fr)); gap: 48px 32px; justify-items: center; }
+.frame-wrap { width: 375px; max-width: 100%; }
+.frame-label { font-size: 15px; font-weight: 700; margin-bottom: 12px; display: flex; gap: 8px; align-items: baseline; }
+.frame-label b { color: var(--board-text-2); font-weight: 600; font-variant-numeric: tabular-nums; }
+.notes { margin-top: 16px; font-size: 14px; line-height: 1.6; color: var(--board-text-2); padding-left: 18px; word-break: keep-all; }
+.notes li + li { margin-top: 4px; }
+
+.phone {
+  width: 375px; max-width: 100%; height: 780px; border-radius: 44px; overflow: hidden; position: relative;
+  background: var(--bg); color: var(--text); box-shadow: 0 0 0 10px #1B1916, 0 24px 60px rgba(0,0,0,.25);
+  display: flex; flex-direction: column; word-break: keep-all; overflow-wrap: anywhere;
+}
+.status { height: 48px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 6px 28px 0; font-size: 15px; font-weight: 600; }
+.status .dots { letter-spacing: 2px; font-size: 12px; }
+.body { flex: 1; overflow: hidden; padding: 8px 16px 16px; display: flex; flex-direction: column; }
+
+.tabbar { flex: none; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--line); background: var(--surface); padding: 4px 8px 24px; }
+.tab { min-height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 14px; font-weight: 700; color: var(--text-2); }
+.tab svg { width: 26px; height: 26px; }
+.tab.on { color: var(--accent); }
+
+.title { font-size: 30px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.25; }
+.sub { font-size: 18px; color: var(--text-2); margin-top: 4px; line-height: 1.5; }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 14px; border-radius: 18px; background: var(--surface); border: 1px solid var(--line); font-size: 16px; font-weight: 700; }
+.chip.accent { background: var(--accent-soft); border-color: transparent; color: var(--accent-ink); }
+.eyebrow { font-size: 16px; font-weight: 700; color: var(--accent-ink); }
+.card { background: var(--surface); border-radius: 24px; padding: 20px; border: 1px solid var(--line); }
+.ref { font-size: 26px; font-weight: 800; letter-spacing: -0.01em; margin-top: 4px; }
+.verse { font-size: 24px; line-height: 1.7; margin-top: 12px; font-weight: 500; }
+.btn { width: 100%; min-height: 64px; border-radius: 18px; border: 0; font-family: inherit; font-size: 21px; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 10px; }
+.btn.primary { background: var(--accent); color: var(--accent-on); }
+.btn.secondary { background: var(--surface-2); color: var(--text); }
+.btn.small { min-height: 56px; font-size: 19px; }
+.btn svg { width: 24px; height: 24px; }
+.link { background: none; border: 0; font-family: inherit; font-size: 17px; font-weight: 700; color: var(--text-2); min-height: 48px; text-decoration: underline; text-underline-offset: 4px; }
+.spacer { flex: 1; }
+.stack > * + * { margin-top: 12px; }
+.sec-t { font-size: 18px; font-weight: 800; margin: 14px 4px 10px; }
+
+/* 알림 설정 */
+.row-line { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 56px; }
+.row-line + .row-line { border-top: 1px solid var(--line); }
+.row-line .lbl { font-size: 19px; font-weight: 700; }
+.row-line .lbl small { display: block; font-size: 15px; font-weight: 500; color: var(--text-2); margin-top: 2px; }
+.switch { width: 56px; height: 34px; border-radius: 17px; background: var(--step-todo); position: relative; flex: none; }
+.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 28px; height: 28px; border-radius: 50%; background: #fff; box-shadow: var(--shadow); }
+.switch.on { background: var(--accent); }
+.switch.on::after { left: 25px; }
+.seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: var(--surface-2); padding: 4px; border-radius: 16px; }
+.seg span { min-height: 48px; display: flex; align-items: center; justify-content: center; border-radius: 12px; font-size: 18px; font-weight: 800; color: var(--text-2); }
+.seg span.on { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+.pill { min-height: 48px; padding: 0 16px; border-radius: 14px; background: var(--surface-2); font-size: 19px; font-weight: 800; display: inline-flex; align-items: center; font-variant-numeric: tabular-nums; }
+.stepper { display: flex; align-items: center; gap: 8px; }
+.stepper i { width: 48px; height: 48px; border-radius: 14px; background: var(--surface-2); display: flex; align-items: center; justify-content: center; font-style: normal; font-size: 24px; font-weight: 800; }
+.stepper b { min-width: 52px; text-align: center; font-size: 24px; font-weight: 900; color: var(--accent-ink); font-variant-numeric: tabular-nums; }
+.start-ref { font-size: 15px; color: var(--text-2); margin-top: -4px; padding-bottom: 8px; text-align: right; }
+.next-box { margin-top: 8px; background: var(--accent-soft); color: var(--accent-ink); border-radius: 16px; padding: 12px 16px; font-size: 16px; font-weight: 700; line-height: 1.5; }
+.next-box b { display: block; font-size: 18px; color: var(--text); }
+.rule { font-size: 15px; color: var(--text-2); line-height: 1.55; margin-top: 10px; }
+
+/* 잠금 화면 */
+.lock { background: linear-gradient(170deg, #3B2A20 0%, #1C1512 55%, #0E0B09 100%); color: #fff; }
+.lock .clock { text-align: center; margin-top: 8px; }
+.lock .clock p { font-size: 18px; font-weight: 600; opacity: .85; }
+.lock .clock b { display: block; font-size: 84px; font-weight: 700; letter-spacing: -2px; line-height: 1; margin-top: 2px; }
+.noti { display: grid; grid-template-columns: 38px 1fr; gap: 10px; background: rgba(255,255,255,.16); backdrop-filter: blur(20px); border-radius: 22px; padding: 12px 14px; margin: 0 12px; }
+.noti + .noti { margin-top: 10px; }
+.noti img { width: 38px; height: 38px; border-radius: 9px; }
+.noti .h { display: flex; justify-content: space-between; font-size: 14px; opacity: .75; }
+.noti .t { font-size: 16px; font-weight: 700; margin-top: 2px; }
+.noti .m { font-size: 15px; line-height: 1.45; margin-top: 2px; opacity: .92; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.tagline { margin: 22px 20px 8px; font-size: 13px; font-weight: 700; opacity: .6; letter-spacing: .02em; }
+
+/* 달력 */
+.cal-row { display: grid; grid-template-columns: 64px 1fr; gap: 12px; align-items: center; padding: 10px 0; }
+.cal-row + .cal-row { border-top: 1px solid var(--line); }
+.cal-d { text-align: center; border-radius: 14px; background: var(--surface-2); padding: 6px 0; }
+.cal-d small { display: block; font-size: 13px; font-weight: 700; color: var(--accent-ink); }
+.cal-d b { font-size: 22px; font-weight: 900; }
+.cal-t b { font-size: 18px; font-weight: 800; display: block; }
+.cal-t span { font-size: 15px; color: var(--text-2); }
+
+.navbar { height: 56px; flex: none; display: grid; grid-template-columns: 56px 1fr 56px; align-items: center; padding: 0 8px; }
+.navbar h1 { font-size: 20px; font-weight: 800; text-align: center; }
+.navbar svg { width: 28px; height: 28px; margin-left: 10px; }
+.steps-ios { counter-reset: s; }
+.steps-ios li { list-style: none; display: grid; grid-template-columns: 36px 1fr; gap: 10px; align-items: start; font-size: 18px; line-height: 1.5; padding: 8px 0; }
+.steps-ios li::before { counter-increment: s; content: counter(s); width: 32px; height: 32px; border-radius: 16px; background: var(--accent-soft); color: var(--accent-ink); font-weight: 900; display: flex; align-items: center; justify-content: center; font-size: 17px; }
+
+@media (max-width: 420px) { .phone { height: 720px; } }
+</style>
+</head>
+<body>
+
+<header class="board-head">
+  <h1>말씀 보석 100 · 알림 시안</h1>
+  <p>정한 때에 다음 말씀을 알려 주는 기능입니다. <b>매일</b>은 외운 만큼 넘어가고(못 외웠으면 같은 말씀을 한 번 더), <b>매주</b>는 반과 맞추려고 달력대로 월요일마다 다음 번호로 넘어갑니다. 시작 번호는 알림과 오늘의 말씀에 함께 적용됩니다. 날짜는 2026년 10월 13일(화)을 기준으로 한 예시입니다.</p>
+</header>
+
+<main class="board">
+
+<!-- 1. 알림 켜기 전 -->
+<div class="frame-wrap">
+  <div class="frame-label">설정 <b>01 · 알림 켜기 전</b></div>
+  <div class="phone">
+    <div class="status"><span>9:41</span><span class="dots">●●● ▮</span></div>
+    <div class="body">
+      <h1 class="title">설정</h1>
+      <h2 class="sec-t">말씀 알림</h2>
+      <div class="card">
+        <p style="font-size:19px;font-weight:700;line-height:1.5">정한 때에 외울 말씀을 알려 줘요.</p>
+        <p class="sub" style="font-size:16px">매일 또는 매주 월요일, 다음 말씀이 알림으로 와요.</p>
+        <div style="margin-top:16px"><button class="btn primary small">알림 켜기</button></div>
+      </div>
+      <h2 class="sec-t">불러 줄 이름</h2>
+      <div class="card" style="opacity:.5"><p style="font-size:18px">하늘이</p></div>
+      <div class="spacer"></div>
+    </div>
+    <nav class="tabbar" data-tab="3"></nav>
+  </div>
+  <ul class="notes">
+    <li>알림 허용 창은 아이가 “알림 켜기”를 눌렀을 때만 뜹니다(브라우저 규칙).</li>
+    <li>설정 맨 위에 둡니다. 이름·코드보다 자주 찾는 칸입니다.</li>
+  </ul>
+</div>
+
+<!-- 2. 매주 -->
+<div class="frame-wrap">
+  <div class="frame-label">설정 <b>02 · 매주로 켰을 때</b></div>
+  <div class="phone">
+    <div class="status"><span>9:41</span><span class="dots">●●● ▮</span></div>
+    <div class="body">
+      <h1 class="title">설정</h1>
+      <h2 class="sec-t">말씀 알림</h2>
+      <div class="card" style="padding:12px 16px 16px">
+        <div class="row-line"><span class="lbl">알림</span><span class="switch on"></span></div>
+        <div class="row-line" style="display:block;padding:6px 0 8px"><div class="seg"><span>매일</span><span class="on">매주</span></div></div>
+        <div class="row-line"><span class="lbl">월요일</span><span class="pill">오전 7:30</span></div>
+        <div class="row-line"><span class="lbl">시작 말씀</span><span class="stepper"><i>−</i><b>23</b><i>+</i></span></div>
+        <p class="start-ref">요한복음 1:29부터</p>
+        <div class="row-line"><span class="lbl">목요일에 한 번 더<small>“기억나요?” 혼자 외워 보기</small></span><span class="switch on"></span></div>
+        <div class="next-box"><b>다음 알림: 10월 19일(월) 오전 7:30</b>23번 요한복음 1:29</div>
+        <p class="rule">월요일마다 다음 번호로 넘어가요. 반 친구들과 같은 말씀을 외워요.</p>
+      </div>
+      <div class="spacer"></div>
+      <div style="display:flex;justify-content:space-between">
+        <button class="link">시험 알림 보내기</button>
+        <button class="link">달력에 넣기</button>
+      </div>
+    </div>
+    <nav class="tabbar" data-tab="3"></nav>
+  </div>
+  <ul class="notes">
+    <li>시작 번호는 처음에 “지금 외울 차례인 말씀”으로 채워 둡니다. 선생님이 “이번 주 23번” 하면 23으로 맞춥니다.</li>
+    <li>번호 아래에 장절을 바로 보여 줘서 맞게 골랐는지 알 수 있습니다.</li>
+    <li>다음 알림 상자가 “언제, 무엇이 오는지”를 한 줄로 확인시켜 줍니다.</li>
+  </ul>
+</div>
+
+<!-- 3. 매일 -->
+<div class="frame-wrap">
+  <div class="frame-label">설정 <b>03 · 매일로 켰을 때</b></div>
+  <div class="phone">
+    <div class="status"><span>9:41</span><span class="dots">●●● ▮</span></div>
+    <div class="body">
+      <h1 class="title">설정</h1>
+      <h2 class="sec-t">말씀 알림</h2>
+      <div class="card" style="padding:12px 16px 16px">
+        <div class="row-line"><span class="lbl">알림</span><span class="switch on"></span></div>
+        <div class="row-line" style="display:block;padding:6px 0 8px"><div class="seg"><span class="on">매일</span><span>매주</span></div></div>
+        <div class="row-line"><span class="lbl">시간</span><span class="pill">오후 7:00</span></div>
+        <div class="row-line"><span class="lbl">시작 말씀</span><span class="stepper"><i>−</i><b>23</b><i>+</i></span></div>
+        <p class="start-ref">요한복음 1:29부터</p>
+        <div class="next-box"><b>다음 알림: 10월 14일(수) 오후 7:00</b>23번 요한복음 1:29</div>
+        <p class="rule">외운 만큼 넘어가요. 어제 말씀을 아직 못 외웠으면 같은 말씀을 한 번 더 알려 줘요. 그날 이미 외웠으면 알림을 보내지 않아요.</p>
+      </div>
+      <div class="spacer"></div>
+      <div style="display:flex;justify-content:space-between">
+        <button class="link">시험 알림 보내기</button>
+        <button class="link">달력에 넣기</button>
+      </div>
+    </div>
+    <nav class="tabbar" data-tab="3"></nav>
+  </div>
+  <ul class="notes">
+    <li>시간은 아침 6시부터 저녁 9시까지 30분 단위로 고릅니다.</li>
+    <li>서버가 15분마다 돌기 때문에 정한 시간보다 최대 15분 늦게 올 수 있습니다.</li>
+  </ul>
+</div>
+
+<!-- 4. 잠금 화면 -->
+<div class="frame-wrap">
+  <div class="frame-label">알림 <b>04 · 잠금 화면에서</b></div>
+  <div class="phone lock">
+    <div class="status"><span></span><span class="dots">●●● ▮</span></div>
+    <div class="clock"><p>10월 19일 월요일</p><b>7:31</b></div>
+    <p class="tagline">매주 · 월요일</p>
+    <div class="noti">
+      <img src="../web/icons/icon-192.png" alt="">
+      <div><div class="h"><span>말씀 보석 100</span><span>지금</span></div>
+        <p class="t">이번 주 말씀 · 23번</p>
+        <p class="m">요한복음 1:29 — 이튿날 요한이 예수님께서 자기에게 오시는 것을 보고 말하였다.</p></div>
+    </div>
+    <p class="tagline">매주 · 목요일 (한 번 더)</p>
+    <div class="noti">
+      <img src="../web/icons/icon-192.png" alt="">
+      <div><div class="h"><span>말씀 보석 100</span><span>목 오전 7:30</span></div>
+        <p class="t">이번 주 말씀, 기억나요?</p>
+        <p class="m">요한복음 1:29를 안 보고 말해 봐요.</p></div>
+    </div>
+    <p class="tagline">매일 · 어제 말씀을 못 외웠을 때</p>
+    <div class="noti">
+      <img src="../web/icons/icon-192.png" alt="">
+      <div><div class="h"><span>말씀 보석 100</span><span>오후 7:00</span></div>
+        <p class="t">어제 말씀, 오늘 마저 외워요</p>
+        <p class="m">23번 요한복음 1:29 — 이튿날 요한이 예수님께서…</p></div>
+    </div>
+    <p class="tagline">100구절을 다 외웠을 때 (한 번만)</p>
+    <div class="noti">
+      <img src="../web/icons/icon-192.png" alt="">
+      <div><div class="h"><span>말씀 보석 100</span><span>오후 7:00</span></div>
+        <p class="t">열두 보석이 모두 빛나요!</p>
+        <p class="m">두 번째 바퀴를 시작해 볼까요?</p></div>
+    </div>
+  </div>
+  <ul class="notes">
+    <li>누르면 그 구절의 연습 화면이 바로 열립니다. 목요일 알림은 4단계(혼자)로 엽니다.</li>
+    <li>본문은 첫 줄만 보여서, 잠금 화면에서 다 읽고 끝내지 않고 앱을 열게 합니다.</li>
+    <li>하루에 두 번 넘게 보내지 않습니다.</li>
+  </ul>
+</div>
+
+<!-- 5. 오늘 화면(매주) -->
+<div class="frame-wrap">
+  <div class="frame-label">오늘 <b>05 · 매주 모드의 오늘 화면</b></div>
+  <div class="phone">
+    <div class="status"><span>9:41</span><span class="dots">●●● ▮</span></div>
+    <div class="body">
+      <p class="sub" style="margin:0 0 4px">안녕, 하늘이! 이번 주 말씀이에요</p>
+      <div class="chips" style="margin-bottom:16px">
+        <span class="chip accent">외운 말씀 21개</span>
+        <span class="chip">10월 19일 ~ 25일</span>
+      </div>
+      <article class="card">
+        <p class="eyebrow">이번 주 말씀 · 23번 · 예수 그리스도</p>
+        <h2 class="ref">요한복음 1:29</h2>
+        <p class="verse">이튿날 요한이 예수님께서 자기에게 오시는 것을 보고 말하였다. 보십시오, 세상의 죄를 없애시는 하나님의 어린양이십니다.</p>
+      </article>
+      <button class="link" style="margin-top:4px;text-align:left;padding:0 4px">지난주 말씀(22번 마태복음 1:21)도 아직이에요 ›</button>
+      <div class="spacer"></div>
+      <div class="stack">
+        <button class="btn secondary small"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/></svg>들어 보기</button>
+        <button class="btn primary">외우러 가기</button>
+      </div>
+    </div>
+    <nav class="tabbar" data-tab="0"></nav>
+  </div>
+  <ul class="notes">
+    <li>매주 모드에서는 오늘의 말씀이 “이번 주 말씀”이 됩니다. 알림과 앱이 늘 같은 말씀을 보여 줍니다.</li>
+    <li>지난 주 말씀을 못 외웠으면 한 줄로만 알려 줍니다. 이번 주 말씀이 먼저입니다.</li>
+    <li>매일 모드의 오늘 화면은 지금과 같고, 시작 번호(23번)부터 차례로 나옵니다.</li>
+  </ul>
+</div>
+
+<!-- 6. 아이폰 안내 -->
+<div class="frame-wrap">
+  <div class="frame-label">안내 <b>06 · 알림이 올 수 없는 아이폰</b></div>
+  <div class="phone">
+    <div class="status"><span>9:41</span><span class="dots">●●● ▮</span></div>
+    <div class="navbar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg><h1>말씀 알림</h1><span></span></div>
+    <div class="body">
+      <p style="font-size:22px;font-weight:800;line-height:1.4">아이폰은 홈 화면에 추가해야 알림이 와요</p>
+      <ol class="steps-ios" style="margin-top:12px">
+        <li>Safari 아래쪽 공유 버튼을 눌러요</li>
+        <li>“홈 화면에 추가”를 눌러요</li>
+        <li>홈 화면의 말씀보석 아이콘으로 열고, 설정에서 “알림 켜기”를 눌러요</li>
+      </ol>
+      <div class="card" style="margin-top:16px">
+        <p style="font-size:18px;font-weight:800">알림 대신 달력으로 받기</p>
+        <p class="sub" style="font-size:16px">부모님 휴대폰 달력에 매주 말씀 일정을 넣어요. 일정 알림으로 장절과 앱 링크가 와요.</p>
+        <div style="margin-top:12px"><button class="btn secondary small">달력에 넣기</button></div>
+      </div>
+      <div class="spacer"></div>
+    </div>
+  </div>
+  <ul class="notes">
+    <li>Safari에서 열었거나 iOS 16.4보다 낮으면 “알림 켜기” 대신 이 화면을 보여 줍니다.</li>
+    <li>홈 화면에 추가해도 이전에 쓰던 진도는 내 코드로 이어집니다.</li>
+  </ul>
+</div>
+
+<!-- 7. 달력에 넣기 -->
+<div class="frame-wrap">
+  <div class="frame-label">달력 <b>07 · 달력에 넣기</b></div>
+  <div class="phone">
+    <div class="status"><span>9:41</span><span class="dots">●●● ▮</span></div>
+    <div class="navbar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg><h1>달력에 넣기</h1><span></span></div>
+    <div class="body">
+      <p class="sub" style="margin-top:0">매주 월요일 오전 7:30, 23번부터</p>
+      <div class="card" style="margin-top:12px;padding:6px 16px">
+        <div class="cal-row"><div class="cal-d"><small>10월</small><b>19</b></div><div class="cal-t"><b>23번 요한복음 1:29</b><span>세상의 죄를 없애시는 어린양</span></div></div>
+        <div class="cal-row"><div class="cal-d"><small>10월</small><b>26</b></div><div class="cal-t"><b>24번 이사야서 53:5</b><span>그가 상처를 입은 것은</span></div></div>
+        <div class="cal-row"><div class="cal-d"><small>11월</small><b>2</b></div><div class="cal-t"><b>25번 요한복음 12:24</b><span>한 알의 밀이 땅에 떨어져</span></div></div>
+        <div class="cal-row"><div class="cal-d"><small>11월</small><b>9</b></div><div class="cal-t"><b>26번 요한복음 11:25</b><span>나는 부활이요 생명이니</span></div></div>
+      </div>
+      <p class="rule" style="padding:0 4px">100번까지 78주 일정이 한 번에 들어가요. 일정마다 그 구절 링크가 있어요.</p>
+      <div class="spacer"></div>
+      <div class="stack">
+        <button class="btn primary">달력 파일 받기</button>
+        <button class="btn secondary small">반 친구들에게 보내기</button>
+      </div>
+    </div>
+  </div>
+  <ul class="notes">
+    <li>서버 없이 기기에서 .ics 파일을 만듭니다. 아이폰·안드로이드 기본 달력이 모두 엽니다.</li>
+    <li>선생님은 “반 친구들에게 보내기”로 같은 일정을 카카오톡에 나눌 수 있습니다.</li>
+    <li>달력은 아이의 진도를 모릅니다. 매주처럼 달력대로 넘어가는 경우에만 둡니다.</li>
+  </ul>
+</div>
+
+</main>
+
+<script>
+// 아래 탭(오늘 · 구절 · 내 말씀 · 설정)
+const TABS = [
+  ['오늘', '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'],
+  ['구절', '<path d="M4 19.5V5a2 2 0 0 1 2-2h12v18H6a2 2 0 0 1-2-1.5Z"/><path d="M8 7h6M8 11h6"/>'],
+  ['내 말씀', '<path d="M6 3h12l4 6-10 12L2 9Z"/><path d="M2 9h20M12 21 8 9l4-6 4 6Z"/>'],
+  ['설정', '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/>'],
+];
+document.querySelectorAll('.tabbar').forEach((nav) => {
+  const on = Number(nav.dataset.tab);
+  nav.innerHTML = TABS.map(([name, d], i) =>
+    `<span class="tab${i === on ? ' on' : ''}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>${name}</span>`).join('');
+});
+</script>
+</body>
+</html>

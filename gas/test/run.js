@@ -191,6 +191,54 @@ test('round 열이 없던 옛 시트도 처음 쓸 때 머리글을 붙이고, �
   eq(r.marks.map((m) => [m.verse_id, m.round]), [[3, 1], [4, 2]]);
 });
 
+console.log('알림 0단계');
+const TOKEN = 'fcm_token_' + 'a'.repeat(140) + ':APA91b';
+test('FCM 프로젝트가 비어 있으면 NOT_READY', () => {
+  const env = fresh();
+  eq(env.post({ action: 'push0', device_id: DEV, token: TOKEN }).error.code, 'NOT_READY');
+});
+test('토큰 모양이 틀리면 INVALID', () => {
+  const env = fresh();
+  env.ctx.FCM_PROJECT_ID = 'test-project';
+  eq(env.post({ action: 'push0', device_id: DEV, token: 'short' }).error.code, 'INVALID');
+  eq(env.post({ action: 'push0', device_id: DEV, token: TOKEN + '<script>' }).error.code, 'INVALID');
+});
+test('지금 보내기는 FCM v1에 data만 담아 보낸다', () => {
+  const env = fresh();
+  env.ctx.FCM_PROJECT_ID = 'test-project';
+  const r = env.post({ action: 'push0', device_id: DEV, token: TOKEN });
+  ok(r.ok, JSON.stringify(r));
+  eq(env.fetches.length, 1);
+  const f = env.fetches[0];
+  eq(f.url, 'https://fcm.googleapis.com/v1/projects/test-project/messages:send');
+  eq(f.opt.headers['x-goog-user-project'], 'test-project');
+  const msg = JSON.parse(f.opt.payload).message;
+  eq(msg.token, TOKEN);
+  eq(msg.webpush.data.url, '?opened=now');
+  ok(Object.values(msg.webpush.data).every((v) => typeof v === 'string'), 'data 값은 모두 글');
+});
+test('FCM이 거절하면 PUSH_FAILED와 이유', () => {
+  const env = fresh();
+  env.ctx.FCM_PROJECT_ID = 'test-project';
+  env.replyFetch(() => [403, '{"error":{"status":"PERMISSION_DENIED"}}']);
+  const r = env.post({ action: 'push0', device_id: DEV, token: TOKEN });
+  eq(r.error.code, 'PUSH_FAILED');
+  ok(r.error.message.includes('PERMISSION_DENIED'), r.error.message);
+});
+test('1분 뒤 보내기는 트리거를 하나만 걸고, 때가 되면 보내고 지운다', () => {
+  const env = fresh();
+  env.ctx.FCM_PROJECT_ID = 'test-project';
+  ok(env.post({ action: 'push0', device_id: DEV, token: TOKEN, delay: 60 }).ok);
+  ok(env.post({ action: 'push0', device_id: 'device_bbbbbbbb', token: TOKEN, delay: 60 }).ok);
+  eq(env.triggers.length, 1);
+  eq(env.fetches.length, 0);
+  env.tick(61 * 1000);
+  env.call('push0Due');
+  eq(env.fetches.length, 2);
+  eq(JSON.parse(env.fetches[0].opt.payload).message.webpush.data.url, '?opened=later');
+  eq(env.triggers.length, 0);
+});
+
 console.log('계단 코드로 불러오기');
 test('띄어쓰기나 - 없이 넣어도 불러온다', () => {
   const env = fresh();

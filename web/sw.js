@@ -1,6 +1,7 @@
 // 오프라인 저장. 처음 열 때 모든 파일과 구절 데이터를 저장하고, 다음부터는 저장한 것을 먼저 보여 준 뒤
 // 뒤에서 새 파일을 받아 둔다(다음에 열 때 반영). 파일을 바꾸면 VERSION을 올린다.
-const VERSION = 'v100-2026-10-13-1';
+const VERSION = 'v100-2026-10-13-2';
+const ROOT = new URL('./', self.location).pathname; // 앱이 놓인 경로(/100-verses/)
 const FILES = [
   './',
   'index.html',
@@ -44,6 +45,9 @@ self.addEventListener('fetch', (e) => {
   const req = e.request;
   const url = new URL(req.url);
   if (req.method !== 'GET' || url.origin !== location.origin) return; // 서버(Apps Script) 요청은 그대로 보낸다.
+  // 앱 화면이 아닌 페이지(알림 0단계 시험 앱 push0/ 등)는 앱 화면으로 바꾸지 않고 그대로 받는다.
+  if (req.mode === 'navigate' && url.pathname !== ROOT && url.pathname !== ROOT + 'index.html') return;
+  if (url.pathname.startsWith(ROOT + 'push0/')) return;
   const key = req.mode === 'navigate' ? 'index.html' : req;
   e.respondWith(
     caches.open(VERSION).then(async (cache) => {
