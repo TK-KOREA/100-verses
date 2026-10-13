@@ -29,6 +29,19 @@ const standalone = () => matchMedia('(display-mode: standalone)').matches || nav
 const configured = () => !!(FIREBASE.projectId && FIREBASE.apiKey && VAPID_KEY);
 let token = store.get('token');
 let reg = null;
+let lastPush = null;
+
+/** 서비스 워커가 기록해 둔 마지막 알림(sw.js). 몇 초마다 다시 읽는다. */
+async function readLastPush() {
+  try {
+    const r = await (await caches.open('push0-log')).match('last');
+    const v = r ? await r.json() : null;
+    if (v && v.at !== lastPush?.at) {
+      lastPush = v;
+      paint();
+    }
+  } catch (e) { /* 기록이 없으면 그대로 */ }
+}
 
 function paint() {
   const perm = 'Notification' in window ? Notification.permission : '없음';
@@ -39,6 +52,7 @@ function paint() {
     ['알림 토큰', token ? token.slice(0, 10) + '…' : '없음', !!token],
     ['Firebase 설정', configured() ? FIREBASE.projectId : '아직 비어 있음', configured()],
     ['서버', API_URL ? '연결' : '없음(localhost는 ?api=)', !!API_URL],
+    ['마지막으로 받은 알림', lastPush ? `${lastPush.title} (${new Date(lastPush.at).toTimeString().slice(0, 8)})` : '없음', !!lastPush],
   ];
   $('status').replaceChildren(...rows.map(([k, v, good]) => {
     const row = document.createElement('div');
@@ -115,3 +129,5 @@ if (opened) {
 
 if ('serviceWorker' in navigator) ensureRegistration().catch((e) => log('서비스 워커 등록 실패: ' + e.message));
 paint();
+readLastPush();
+setInterval(readLastPush, 3000);

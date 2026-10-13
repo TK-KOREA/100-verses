@@ -12,11 +12,16 @@ self.addEventListener('push', (e) => {
     d = { body: e.data ? e.data.text() : '' };
   }
   const url = new URL(d.url || './', self.registration.scope).href;
-  e.waitUntil(self.registration.showNotification(d.title || '말씀 보석 100', {
-    body: d.body || '',
-    icon: new URL('../icons/icon-192.png', self.registration.scope).href,
-    data: { url },
-  }));
+  const title = d.title || '말씀 보석 100';
+  e.waitUntil(Promise.all([
+    self.registration.showNotification(title, {
+      body: d.body || '',
+      icon: new URL('../icons/icon-192.png', self.registration.scope).href,
+      data: { url },
+    }),
+    // 받은 알림을 기록해 둔다. 알림 띠를 놓쳐도 앱을 열면 "마지막으로 받은 알림"에서 확인한다.
+    caches.open('push0-log').then((c) => c.put('last', new Response(JSON.stringify({ title, at: new Date().toISOString() })))),
+  ]));
 });
 
 // 알림을 누르면 시험 앱을 그 주소로 연다(이미 열려 있으면 그 창을 옮긴다).
