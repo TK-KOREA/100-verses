@@ -195,6 +195,7 @@ console.log('알림 0단계');
 const TOKEN = 'fcm_token_' + 'a'.repeat(140) + ':APA91b';
 test('FCM 프로젝트가 비어 있으면 NOT_READY', () => {
   const env = fresh();
+  env.ctx.FCM_PROJECT_ID = '';
   eq(env.post({ action: 'push0', device_id: DEV, token: TOKEN }).error.code, 'NOT_READY');
 });
 test('토큰 모양이 틀리면 INVALID', () => {

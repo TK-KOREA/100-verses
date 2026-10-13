@@ -25,7 +25,7 @@ var SCHEMA = {
 };
 
 // 알림(Firebase Cloud Messaging) 프로젝트 id. 공개 값이다. 비어 있으면 알림을 보내지 않는다(NOT_READY).
-var FCM_PROJECT_ID = '';
+var FCM_PROJECT_ID = 'malsseum-boseok';
 
 var VERSE_COUNT = 100;
 var ROUND_MAX = 99;
