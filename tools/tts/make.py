@@ -1,0 +1,650 @@
+"""읽어주기 음원 만들기 (Gemini TTS → m4a + 덩어리 시간표).
+
+구절마다 두 파일을 만든다.
+  ref.m4a   "디모데후서 3장 15절"
+  text.m4a  본문. 덩어리 사이에 [short pause]를 넣어 합성하고, 소리 없는 곳으로 시간표를 뽑는다.
+시간표와 본문 해시는 manifest.json에 적는다. 본문·목소리 설계가 그대로면 다시 만들지 않는다.
+
+  python3 tools/tts/make.py daily [--loop]   → 오늘 무료 한도만큼 1번 구절부터 다섯 목소리를 같이(--loop: 매일 이어서)
+  python3 tools/tts/make.py status           → 목소리별로 몇 구절 만들었는지
+  python3 tools/tts/make.py sample [--ids 4] [--voices teacher,dad]   → tools/tts/out/samples/
+  python3 tools/tts/make.py build --voice teacher [--ids 1-10] [--force] → web/audio/<voice>/
+
+API 키: 환경변수 GEMINI_API_KEY, 없으면 tools/tts/.env (저장소에 올리지 않는다).
+"""
+from __future__ import annotations
+
+import argparse
+import array
+import hashlib
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
+import time
+from datetime import datetime, timedelta
+from pathlib import Path
+from zoneinfo import ZoneInfo
+
+HERE = Path(__file__).resolve().parent
+ROOT = HERE.parents[1]
+sys.path.insert(0, str(HERE))
+from voices import COMMON_RULES, VOICES  # noqa: E402
+
+RATE = 24000
+# 무료 등급은 모델마다 하루 10번이라 위에서부터 다 쓰면 다음 모델로 간다. 어느 모델로 만들었는지는 manifest에 남는다.
+MODELS = [m for m in os.environ.get("TTS_MODELS", "").split(",") if m] or [
+    "gemini-3.8-flash-tts", "gemini-3.1-flash-tts-preview", "gemini-2.5-flash-preview-tts", "gemini-2.5-pro-preview-tts"]
+BITRATE = "48k"
+HEAR_MODELS = ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-flash-latest"]  # 받아쓰기 확인
+PAD = 0.12  # 앞뒤에 남길 쉼(초)
+GAP = 0.4  # 덩어리 사이 쉼(초)
+
+# ---------- 글 ----------
+
+PUNCT_END = re.compile(r"[,.?!:;”’」』)]$")
+# 앞말에 붙어 읽어야 하는 말. 이 말 앞에서는 끊지 않는다.
+BOUND = re.compile(r"^(수|것\S*|때\S*|뿐|데\S*|줄|적이|있\S*|없\S*|않\S*|못할\S*|못하\S*|합니다\S*|하십니다\S*|하겠다\S*|하시리라\S*|하되\S*|하며\S*|하고\S*|하게\S*|되고\S*|되게\S*|되어\S*|주고\S*|주시\S*|다니는|계신\S*|분이\S*|분은\S*|분께서\S*|안에\S*|위하여\S*|통하여\S*|따라\S*)$")
+
+
+def chunks_of(text: str, fixes: dict, vid: int) -> list[str]:
+    """본문을 따라 말하기 좋은 덩어리로 나눈다. 손으로 나눈 것(chunks.txt)이 있으면 그것을 쓴다.
+    끊는 곳: 쉼표·마침표 뒤, 또는 덩어리가 길어졌을 때(어절 3개 또는 10자). 뒤에 붙는 말 앞에서는 미룬다."""
+    if str(vid) in fixes:
+        return fixes[str(vid)]
+    words = text.replace("\n", " ").split()
+    out, cur = [], []
+    for i, w in enumerate(words):
+        cur.append(w)
+        nxt = words[i + 1] if i + 1 < len(words) else ""
+        n = len("".join(cur))
+        if not nxt:
+            break
+        glued = bool(BOUND.match(nxt)) and not PUNCT_END.search(w)
+        if PUNCT_END.search(w) and (n >= 5 or len(out) == 0):
+            out.append(" ".join(cur)); cur = []
+        elif not glued and (len(cur) >= 3 or n >= 10) and len(cur) < 5:
+            out.append(" ".join(cur)); cur = []
+        elif len(cur) >= 5:
+            out.append(" ".join(cur)); cur = []
+    if cur:
+        if out and len("".join(cur)) <= 4:
+            out[-1] += " " + " ".join(cur)
+        else:
+            out.append(" ".join(cur))
+    return out
+
+
+def load_chunks(by_id: dict) -> dict:
+    """chunks.txt(손으로 나눈 덩어리)를 읽는다. 이은 글이 본문과 다르면 멈춘다."""
+    out, bad = {}, []
+    path = HERE / "chunks.txt"
+    if not path.exists():
+        return out
+    for line in path.read_text().splitlines():
+        if not line.strip() or line.startswith("#"):
+            continue
+        vid, _, rest = line.partition("|")
+        parts = [c.strip() for c in rest.split(" / ") if c.strip()]
+        if " ".join(parts) != " ".join(by_id[int(vid)]["text"].split()):
+            bad.append(vid)
+        out[vid.strip()] = parts
+    if bad:
+        sys.exit("chunks.txt 덩어리를 이은 글이 본문과 다릅니다: " + ", ".join(bad))
+    return out
+
+
+def spoken_ref(v: dict) -> str:
+    if v["verseEnd"] != v["verseStart"]:
+        rng = f"{v['verseStart']}절에서 {v['verseEnd']}절"
+    else:
+        rng = f"{v['verseStart']}절"
+    return f"{v['book']} {v['chapter']}장 {rng}"
+
+
+def prompt_for(p: dict, transcript: str) -> str:
+    return (
+        "Synthesize speech for the performance defined below.\n"
+        "The profile, scene, and notes are direction only. Do NOT speak them.\n"
+        "Speak ONLY the lines under #### TRANSCRIPT, in Korean.\n\n"
+        "# AUDIO PROFILE\n"
+        f"Style: {p['style']}\n"
+        f"Voice: {p['voice_desc']}\n\n"
+        "# SCENE\n"
+        f"{p['scene']}\n\n"
+        "### DIRECTOR'S NOTES\n"
+        f"Pace: {p['pace']}\n"
+        f"Tone: {p['tone']}\n"
+        f"Rules: {COMMON_RULES}\n\n"
+        "#### TRANSCRIPT\n"
+        f"{transcript}\n"
+    )
+
+
+def design_hash(p: dict) -> str:
+    s = json.dumps([p, COMMON_RULES, BITRATE, GAP], ensure_ascii=False, sort_keys=True)
+    return hashlib.sha1(s.encode()).hexdigest()[:10]
+
+
+def text_hash(s) -> str:
+    return hashlib.sha1(json.dumps(s, ensure_ascii=False).encode()).hexdigest()[:10]
+
+# ---------- Gemini ----------
+
+_client = None
+_model = None
+
+
+def load_key() -> None:
+    if os.environ.get("GEMINI_API_KEY"):
+        return
+    env = HERE / ".env"
+    if env.exists():
+        for line in env.read_text().splitlines():
+            k, _, val = line.partition("=")
+            if k.strip() == "GEMINI_API_KEY" and val.strip():
+                os.environ["GEMINI_API_KEY"] = val.strip().strip('"').strip("'")
+    if not os.environ.get("GEMINI_API_KEY"):
+        sys.exit("GEMINI_API_KEY가 없습니다. 환경변수나 tools/tts/.env에 넣어 주세요.")
+
+
+def synth_client():
+    global _client
+    from google import genai
+    if _client is None:
+        _client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+    return _client
+
+
+class QuotaDone(Exception):
+    """오늘 쓸 수 있는 요청을 다 썼다(무료 등급은 모델마다 하루 10번)."""
+
+
+_spent = set()  # 오늘 한도를 다 쓴 모델
+
+
+def _wait_of(msg: str) -> float:
+    m = re.search(r"retry in (?:(\d+)h)?(?:(\d+)m)?([\d.]+)s", msg)
+    if not m:
+        return 0.0
+    h, mi, se = m.groups()
+    return int(h or 0) * 3600 + int(mi or 0) * 60 + float(se)
+
+
+def call(models: list, fn):
+    """모델을 차례로 써 본다. 하루 한도를 다 쓴 모델은 건너뛰고, 분당 한도면 기다렸다 다시 보낸다.
+    모두 다 썼으면 QuotaDone. 반환: (결과, 쓴 모델)"""
+    last = None
+    for model in [m for m in models if m not in _spent]:
+        for attempt in range(6):
+            try:
+                return fn(model), model
+            except Exception as e:  # noqa: BLE001
+                last = e
+                msg = str(e)
+                if "404" in msg or "NOT_FOUND" in msg:
+                    _spent.add(model)  # 이 모델은 없음
+                    break
+                if "429" in msg or "RESOURCE_EXHAUSTED" in msg:
+                    wait = _wait_of(msg)
+                    if "PerDay" in msg or wait > 300:
+                        _spent.add(model)
+                        print(f"  · {model} 오늘 한도 다 씀", flush=True)
+                        break
+                    time.sleep(min(max(wait, 5), 90) + 1)
+                    continue
+                time.sleep(2 * (2 ** min(attempt, 4)))
+    if all(m in _spent for m in models):
+        raise QuotaDone()
+    raise RuntimeError(f"요청 실패: {last}")
+
+
+def synth(prompt: str, voice: str) -> tuple[bytes, str]:
+    """PCM s16le 24kHz mono."""
+    from google.genai import types
+
+    synth_client()
+    cfg = types.GenerateContentConfig(
+        response_modalities=["AUDIO"],
+        speech_config=types.SpeechConfig(
+            voice_config=types.VoiceConfig(prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=voice))
+        ),
+    )
+
+    def go(model):
+        r = _client.models.generate_content(model=model, contents=prompt, config=cfg)
+        data = r.candidates[0].content.parts[0].inline_data.data
+        if not data:
+            raise RuntimeError("소리가 비어 있음")
+        return data
+
+    return call(MODELS, go)
+
+
+# ---------- 소리 ----------
+
+def frames_db(pcm: bytes, win: int) -> list[float]:
+    a = array.array("h")
+    a.frombytes(pcm[: len(pcm) // 2 * 2])
+    out = []
+    for i in range(0, len(a), win):
+        seg = a[i:i + win]
+        if not seg:
+            break
+        ms = sum(x * x for x in seg) / len(seg)
+        out.append(-100.0 if ms <= 0 else 10 * __import__("math").log10(ms / (32768.0 ** 2)))
+    return out
+
+
+def silences(pcm: bytes, step=0.01, min_len=0.12):
+    """조용한 구간 [(시작, 끝)]. 기준은 말소리 크기에서 30dB 아래."""
+    win = int(RATE * step)
+    db = frames_db(pcm, win)
+    loud = sorted(db)[int(len(db) * 0.9)] if db else -20
+    th = max(loud - 30, -55)
+    runs, s = [], None
+    for i, d in enumerate(db + [0]):
+        if d < th:
+            if s is None:
+                s = i
+        elif s is not None:
+            if (i - s) * step >= min_len:
+                runs.append((s * step, i * step))
+            s = None
+    # 쉼 가운데 숨소리·딸깍 소리(0.08초 이하)는 쉼으로 본다
+    merged = []
+    for r in runs:
+        if merged and r[0] - merged[-1][1] <= 0.08:
+            merged[-1] = (merged[-1][0], r[1])
+        else:
+            merged.append(r)
+    return merged, len(db) * step
+
+
+def weight(t: str) -> float:
+    """읽는 길이 어림: 한글 한 자 1, 숫자 한 자 1.5(이십팔), 쉼표·마침표 0.5."""
+    return sum(1.5 if c.isdigit() else 0.5 if c in ",.?!" else 0 if c.isspace() or c in "“”‘’" else 1 for c in t)
+
+
+def pick_bounds(inner, lead, tail, weights):
+    """덩어리 경계로 쓸 쉼을 고른다. 쉼이 길수록, 글자 수로 어림한 자리에 가까울수록 좋다(DP).
+    덩어리는 0.25초보다 짧을 수 없다."""
+    need = len(weights) - 1
+    if need == 0:
+        return [], True
+    if len(inner) < need:
+        return sorted(sorted(inner, key=lambda r: r[1] - r[0], reverse=True)[:need]), False
+    total = sum(weights)
+    span = tail - lead
+    avg = span / len(weights)
+    exp, acc = [], 0.0
+    for w in weights[:-1]:
+        acc += w
+        exp.append(lead + span * acc / total)
+    NEG = float("-inf")
+    m = len(inner)
+    # best[k][j]: k번째 경계에 j번째 쉼을 썼을 때 점수
+    best = [[NEG] * m for _ in range(need)]
+    back = [[-1] * m for _ in range(need)]
+    for k in range(need):
+        for j, (a, b) in enumerate(inner):
+            mid = (a + b) / 2
+            sc = (b - a) - 0.35 * abs(mid - exp[k]) / avg
+            if k == 0:
+                if a - lead >= 0.25:
+                    best[k][j] = sc
+                continue
+            for i in range(j):
+                if best[k - 1][i] > NEG and a - inner[i][1] >= 0.25 and best[k - 1][i] + sc > best[k][j]:
+                    best[k][j], back[k][j] = best[k - 1][i] + sc, i
+    last = [j for j in range(m) if best[need - 1][j] > NEG and tail - inner[j][1] >= 0.25]
+    if not last:
+        return sorted(sorted(inner, key=lambda r: r[1] - r[0], reverse=True)[:need]), False
+    j = max(last, key=lambda x: best[need - 1][x])
+    out = []
+    for k in range(need - 1, -1, -1):
+        out.append(inner[j])
+        j = back[k][j]
+    return out[::-1], True
+
+
+def trim_and_time(pcm: bytes, weights: list):
+    """앞뒤 쉼을 PAD만 남기고, 덩어리 사이 쉼은 GAP 길이로 맞춘다.
+    Gemini는 [short pause]를 1~2초로 길게 쉬어서 그대로 두면 그냥 들을 때 늘어진다.
+    따라 말하기 틈은 앱이 덩어리 끝에서 멈춰 준다. (새 pcm, [[시작,끝]...], 경계를 다 찾았는지, 길이)"""
+    runs, dur = silences(pcm)
+    lead = runs[0][1] if runs and runs[0][0] <= 0.01 else 0.0
+    tail = runs[-1][0] if runs and runs[-1][1] >= dur - 0.02 else dur
+    inner = [r for r in runs if r[0] > lead + 0.05 and r[1] < tail - 0.05]
+    pick, ok = pick_bounds(inner, lead, tail, weights)
+    edges = [lead] + [x for r in pick for x in r] + [tail]
+    speech = [(edges[i], edges[i + 1]) for i in range(0, len(edges), 2)]
+
+    def cut(t0, t1):
+        return pcm[int(t0 * RATE) * 2:int(t1 * RATE) * 2]
+
+    out, times, t = bytearray(), [], 0.0
+    out += cut(max(0.0, lead - PAD), lead)
+    t = len(out) / 2 / RATE
+    for k, (s0, s1) in enumerate(speech):
+        out += cut(s0, s1)
+        times.append([round(t, 2), round(t + s1 - s0, 2)])
+        t += s1 - s0
+        if k < len(speech) - 1:
+            g = min(GAP, pick[k][1] - pick[k][0])
+            out += cut(s1, s1 + g)  # 원래 쉼의 앞부분(숨, 잔향)을 남긴다
+            t += g
+    out += cut(tail, min(dur, tail + PAD))
+    return bytes(out), times, ok, round(len(out) / 2 / RATE, 2)
+
+
+def split_ref(pcm: bytes, ref: str, chunks: list):
+    """[주소, 덩어리...]로 합성된 소리를 주소 파일과 본문 파일로 나눈다."""
+    allp, times, ok, _ = trim_and_time(pcm, [weight(ref)] + [weight(c) for c in chunks])
+    (rs, re_), (ts, _) = times[0], times[1]
+    cut = int(((re_ + ts) / 2) * RATE) * 2  # 주소와 본문 사이 쉼의 가운데
+    rp, tp = allp[:int(min(re_ + PAD, ts) * RATE) * 2], allp[cut:]
+    off = cut / 2 / RATE
+    lead = ts - off
+    if lead > PAD:  # 본문 앞 쉼을 PAD로 맞춘다
+        drop = int((lead - PAD) * RATE) * 2
+        tp, off = tp[drop:], off + drop / 2 / RATE
+    tt = [[round(a - off, 2), round(b - off, 2)] for a, b in times[1:]]
+    return rp, tp, tt, ok, round(len(rp) / 2 / RATE, 2), round(len(tp) / 2 / RATE, 2)
+
+
+def to_m4a(pcm: bytes, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(suffix=".m4a", delete=False) as tf:
+        tmp = tf.name
+    cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "s16le", "-ar", str(RATE), "-ac", "1",
+           "-i", "pipe:0", "-c:a", "aac", "-b:a", BITRATE, "-movflags", "+faststart", "-f", "ipod", tmp]
+    p = subprocess.run(cmd, input=pcm, capture_output=True)
+    if p.returncode != 0:
+        raise RuntimeError("ffmpeg: " + p.stderr.decode(errors="replace")[-300:])
+    os.chmod(tmp, 0o644)
+    os.replace(tmp, path)
+    return hashlib.sha1(path.read_bytes()).hexdigest()[:8]
+
+# ---------- 만들기 ----------
+
+def norm(t: str) -> str:
+    return re.sub(r"[\s,.?!:;“”‘’\"'()]", "", str(t))
+
+
+def hear(path_and_spans: list) -> list:
+    """잘라 낸 조각들을 Gemini에게 받아쓰게 한다(덩어리 경계와 더하거나 뺀 말 확인용)."""
+    from google.genai import types
+    synth_client()
+    parts = ["아래 한국어 음성 조각들을 각각 들리는 그대로 받아써 주세요. 고치거나 더하지 말고, "
+             "조각 순서대로 JSON 문자열 배열로만 답하세요. 소리가 없으면 빈 문자열."]
+    for i, (path, a, b) in enumerate(path_and_spans):
+        cmd = ["ffmpeg", "-loglevel", "error"] + (["-ss", str(a), "-to", str(b)] if b else []) + \
+              ["-i", str(path), "-ac", "1", "-ar", "16000", "-f", "wav", "pipe:1"]
+        wav = subprocess.run(cmd, capture_output=True).stdout
+        parts += [f"조각 {i + 1}:", types.Part.from_bytes(data=wav, mime_type="audio/wav")]
+    cfg = types.GenerateContentConfig(response_mime_type="application/json")
+    try:
+        got, _ = call(HEAR_MODELS, lambda m: json.loads(
+            _client.models.generate_content(model=m, contents=parts, config=cfg).text))
+        return got
+    except QuotaDone:
+        return None  # 받아쓰기 한도를 다 씀 → 확인은 나중에(verify)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def finish(pcm: bytes, ref: str, chunks: list, d: Path, model: str, want: dict, check_ears: bool) -> dict:
+    rp, tp, times, ok, rdur, tdur = split_ref(pcm, ref, chunks)
+    hv = to_m4a(rp, d / "ref.m4a") + to_m4a(tp, d / "text.m4a")
+    # v: 소리 파일이 바뀌면 바뀌는 표시. 앱이 주소 끝에 붙여 옛 저장본을 쓰지 않게 한다.
+    e = {**want, "v": hashlib.sha1(hv.encode()).hexdigest()[:8], "model": model, "ref": ref, "refDur": rdur, "dur": tdur,
+         "chunks": [{"t": c, "s": t[0], "e": t[1]} for c, t in zip(chunks, times)], "check": not ok}
+    if check_ears:
+        listen_check(e, d)
+    else:
+        e["unheard"] = True
+    return e
+
+
+def listen_check(e: dict, d: Path) -> None:
+    """받아쓰기로 주소와 덩어리를 확인해 e["check"]를 정한다. 한도를 다 써서 못 들었으면 unheard로 둔다."""
+    texts = [e["ref"]] + [c["t"] for c in e["chunks"]]
+    got = hear([(d / "ref.m4a", 0, 0)] + [(d / "text.m4a", c["s"], c["e"]) for c in e["chunks"]])
+    if got is None:
+        e["unheard"] = True
+        return
+    e.pop("unheard", None)
+    bad = [i for i, (w, g) in enumerate(zip(texts, got)) if norm(w) != norm(g)]
+    if len(got) != len(texts):
+        bad = bad or [-1]
+    e["heard"] = got
+    e["check"] = bool(bad) or e["check"]
+
+
+def raw_path(key: str, vid: int) -> Path:
+    return HERE / "out/raw" / key / f"{vid:03d}.pcm"
+
+
+def make_one(v: dict, key: str, out: Path, fixes: dict, entry: dict | None, force: bool, ears: bool) -> dict:
+    p = VOICES[key]
+    chunks = chunks_of(v["text"], fixes, v["id"])
+    ref = spoken_ref(v)
+    want = {"design": design_hash(p), "text": text_hash([ref, chunks])}
+    d = out / f"{v['id']:03d}"
+    if not force and entry and all(entry.get(k) == want[k] for k in want) and (d / "text.m4a").exists():
+        return entry
+    # 주소와 본문을 한 번에 합성하고(요청 수 절약, 같은 목소리 결) 첫 덩어리를 주소로 잘라 낸다.
+    transcript = ref + ". [long pause] " + " [short pause] ".join(chunks)
+    e = None
+    for attempt in range(2):  # 받아쓰기가 안 맞으면 한 번 더 합성해 본다
+        try:
+            pcm, model = synth(prompt_for(p, transcript), p["voice"])
+        except QuotaDone:
+            if e is None:
+                raise
+            return e  # 다시 만들 한도가 없으면 첫 것을 "확인 필요"로 둔다
+        rp = raw_path(key, v["id"])
+        rp.parent.mkdir(parents=True, exist_ok=True)
+        rp.write_bytes(pcm)
+        e = finish(pcm, ref, chunks, d, model, want, ears)
+        if not e["check"] or e.get("unheard"):
+            break
+    return e
+
+
+def resplit(v: dict, key: str, out: Path, fixes: dict, entry: dict, ears: bool) -> dict:
+    """합성은 다시 하지 않고 저장해 둔 소리로 덩어리만 다시 나눈다."""
+    chunks = chunks_of(v["text"], fixes, v["id"])
+    ref = spoken_ref(v)
+    want = {"design": entry["design"], "text": text_hash([ref, chunks])}
+    rp = raw_path(key, v["id"])
+    d = out / f"{v['id']:03d}"
+    if rp.exists():
+        pcm = rp.read_bytes()
+    else:  # 원본이 없으면 만들어 둔 두 파일을 이어 붙여 쓴다(줄인 쉼도 쉼이라 다시 찾을 수 있다)
+        pcm = b"".join(subprocess.run(["ffmpeg", "-loglevel", "error", "-i", str(d / n), "-f", "s16le", "-ac", "1",
+                                       "-ar", str(RATE), "pipe:1"], capture_output=True).stdout
+                       for n in ("ref.m4a", "text.m4a"))
+    return finish(pcm, ref, chunks, d, entry["model"], want, ears)
+
+
+def parse_ids(s: str | None, all_ids: list[int]) -> list[int]:
+    if not s:
+        return all_ids
+    out = []
+    for part in s.split(","):
+        a, _, b = part.partition("-")
+        out += list(range(int(a), int(b or a) + 1))
+    return out
+
+
+class Store:
+    """목소리마다 manifest.json을 읽고, 구절 하나 만들 때마다 바로 저장한다(중간에 끊겨도 남는다)."""
+
+    def __init__(self, base: Path, sample: bool):
+        self.base, self.sample, self.mans = base, sample, {}
+
+    def man(self, key: str) -> dict:
+        if key not in self.mans:
+            mpath = self.base / key / "manifest.json"
+            m = json.loads(mpath.read_text()) if mpath.exists() else {"voice": key, "verses": {}}
+            m.update({"voice": key, "name": VOICES[key]["name"], "gemini": VOICES[key]["voice"], "gap": GAP, "rate": RATE})
+            self.mans[key] = m
+        return self.mans[key]
+
+    def put(self, key: str, i: int, e: dict) -> None:
+        heard = e.pop("heard", None)
+        m = self.man(key)
+        m["verses"][str(i)] = e
+        out = self.base / key
+        out.mkdir(parents=True, exist_ok=True)
+        m["verses"] = dict(sorted(m["verses"].items(), key=lambda kv: int(kv[0])))
+        (out / "manifest.json").write_text(json.dumps(m, ensure_ascii=False, separators=(",", ":")))
+        if heard is not None:  # 받아쓰기 결과는 앱에 필요 없어 따로 둔다
+            hp = HERE / "out/heard" / (key + ("-sample" if self.sample else "") + ".json")
+            hp.parent.mkdir(parents=True, exist_ok=True)
+            hd = json.loads(hp.read_text()) if hp.exists() else {}
+            hd[str(i)] = heard
+            hp.write_text(json.dumps(hd, ensure_ascii=False, indent=1))
+
+
+def line(key: str, i: int, e: dict, t0: float) -> str:
+    flag = "  ← 확인 필요" if e.get("check") else ("  (받아쓰기 확인 아직)" if e.get("unheard") else "")
+    return f"{key:12s} {i:3d} {e['dur']:5.1f}s {e['model']} {time.time() - t0:4.1f}s{flag}"
+
+
+def status(store: Store, ids: list) -> None:
+    total = len(ids)
+    print("\n목소리별 진행")
+    for key in VOICES:
+        vs = store.man(key)["verses"]
+        done = [i for i in ids if str(i) in vs]
+        chk = [i for i in done if vs[str(i)].get("check")]
+        unh = [i for i in done if vs[str(i)].get("unheard")]
+        models = sorted({vs[str(i)]["model"] for i in done})
+        nxt = next((i for i in ids if str(i) not in vs), None)
+        print(f"  {VOICES[key]['name']:10s} {len(done):3d}/{total}" + (f"  다음 {nxt}번" if nxt else "  다 만듦")
+              + (f"  확인 필요 {chk}" if chk else "") + (f"  받아쓰기 아직 {len(unh)}" if unh else "")
+              + (f"  모델 {', '.join(models)}" if models else ""))
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("cmd", choices=["daily", "sample", "build", "resplit", "verify", "status", "chunks"],
+                    help="daily: 오늘 한도만큼 1번 구절부터 다섯 목소리를 같이 만든다")
+    ap.add_argument("--voice", help="build/resplit: 목소리 하나")
+    ap.add_argument("--voices", help="sample/resplit: 쉼표로 여럿 (기본 전부)")
+    ap.add_argument("--ids", help="예: 8 또는 1-10,15")
+    ap.add_argument("--samples", action="store_true", help="resplit: 시험 음원 폴더에서")
+    ap.add_argument("--force", action="store_true")
+    ap.add_argument("--no-ears", action="store_true", help="받아쓰기 확인을 건너뜀")
+    ap.add_argument("--loop", action="store_true", help="daily: 한도를 다 쓰면 다음 한도(태평양 자정)까지 기다렸다가 이어서, 다 만들 때까지")
+    a = ap.parse_args()
+
+    data = json.loads((ROOT / "web/data/verses.json").read_text())
+    by_id = {v["id"]: v for v in data["verses"]}
+    all_ids = list(by_id)
+    fixes = load_chunks(by_id)
+
+    if a.cmd == "chunks":  # 합성 없이 덩어리 나누기만 본다
+        for i in parse_ids(a.ids, all_ids):
+            mark = "" if str(i) in fixes else "  (자동)"
+            print(i, " / ".join(chunks_of(by_id[i]["text"], fixes, i)) + mark)
+        return
+
+    sample = a.cmd == "sample" or a.samples
+    store = Store(HERE / "out/samples" if sample else ROOT / "web/audio", sample)
+    if a.cmd == "status":
+        return status(store, all_ids)
+
+    load_key()
+    if a.cmd in ("sample", "verify", "daily") or (a.cmd == "resplit" and not a.voice):
+        keys = a.voices.split(",") if a.voices else list(VOICES)
+    elif a.voice in VOICES:
+        keys = [a.voice]
+    else:
+        sys.exit("--voice: " + ", ".join(VOICES))
+    ids = parse_ids(a.ids or ("8" if sample else None), all_ids)
+    ears = not a.no_ears
+
+    # 할 일: daily는 구절 순서(1번부터)로 다섯 목소리를 같이 만든다. 아이들이 앞 구절부터 외우기 때문이다.
+    if a.cmd == "daily":
+        jobs = [(k, i) for i in ids for k in keys]
+    else:
+        jobs = [(k, i) for k in keys for i in ids]
+
+    def one_pass() -> int:
+        made = 0
+        _spent.clear()  # 새 날이면 한도가 다시 생긴다
+        try:
+            if a.cmd in ("daily", "verify"):  # 받아쓰기를 못 한 것부터 듣는다(합성 한도는 안 쓴다)
+                for k, i in jobs:
+                    e = store.man(k)["verses"].get(str(i))
+                    if e and e.get("unheard"):
+                        t0 = time.time()
+                        listen_check(e, store.base / k / f"{i:03d}")
+                        if not e.get("unheard"):
+                            store.put(k, i, e)
+                            print(line(k, i, e, t0) + "  (받아쓰기)", flush=True)
+                if a.cmd == "verify":
+                    return 0
+            for k, i in jobs:
+                t0 = time.time()
+                old = store.man(k)["verses"].get(str(i))
+                if a.cmd == "resplit":
+                    if not old:
+                        continue
+                    e = resplit(by_id[i], k, store.base / k, fixes, old, ears)
+                else:
+                    e = make_one(by_id[i], k, store.base / k, fixes, old, a.force, ears)
+                    if e is old:
+                        continue
+                    made += 1
+                store.put(k, i, e)
+                print(line(k, i, e, t0), flush=True)
+        except QuotaDone:
+            print(f"\n오늘 쓸 수 있는 합성 한도를 다 썼어요. 이번에 {made}개 만들었습니다.", flush=True)
+        return made
+
+    def left() -> bool:
+        """아직 만들 것(또는 받아쓰기 확인을 못 한 것)이 있는가."""
+        for k, i in jobs:
+            e = store.man(k)["verses"].get(str(i))
+            if not e or e.get("unheard"):
+                return True
+        return False
+
+    while True:
+        print(f"── {time.strftime('%Y-%m-%d %H:%M')} 시작", flush=True)
+        one_pass()
+        if a.cmd in ("daily", "build", "verify"):
+            status(store, all_ids)
+        if not a.loop or not left():
+            if a.loop:
+                print("다 만들었어요. 끝냅니다.", flush=True)
+            return
+        wake = next_reset()
+        print(f"다음 한도는 {wake.strftime('%m-%d %H:%M')}(한국 시간)에 생겨요. 그때까지 기다립니다.", flush=True)
+        # 맥이 잠자는 동안에는 time.sleep이 멈출 수 있어 벽시계로 1분마다 본다.
+        while datetime.now(KST) < wake:
+            time.sleep(60)
+
+
+KST = ZoneInfo("Asia/Seoul")
+
+
+def next_reset() -> datetime:
+    """무료 한도가 다시 생기는 때: 미국 태평양 시간 자정 + 5분(서머타임 자동 반영)."""
+    la = ZoneInfo("America/Los_Angeles")
+    now = datetime.now(la)
+    nxt = (now + timedelta(days=1)).replace(hour=0, minute=5, second=0, microsecond=0)
+    if now < now.replace(hour=0, minute=5, second=0, microsecond=0):
+        nxt = now.replace(hour=0, minute=5, second=0, microsecond=0)
+    return nxt.astimezone(KST)
+
+
+if __name__ == "__main__":
+    main()

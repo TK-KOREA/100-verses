@@ -13,6 +13,7 @@
 - 화면: `web/` 정적 HTML/CSS/JS(ES 모듈, 프레임워크·빌드 없음) → GitHub Pages
 - 서버: `gas/app/` Apps Script 웹 앱(doGet load, doPost register·sync) → 구글 시트 탭 children, marks
 - 진도는 기기에 먼저 쓰고 뒤에서 보낸다(`web/js/progress.js`). 서버 주소는 `web/js/config.js` 한 곳.
+- 들어 보기: 미리 만든 Gemini 음원(`web/audio/`, 만들기는 `tools/tts/`)을 `web/js/player.js`가 틀고 `web/js/sheet.js`가 듣기 판을 그린다. 음원이 없으면 기기 목소리. 앱은 Gemini를 부르지 않는다.
 
 ## 꼭 지킬 것 (five-people-garden 0단계 결과와 같음)
 

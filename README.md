@@ -14,6 +14,8 @@
 | web/ | GitHub Pages로 올리는 화면 (`index.html`, `css/`, `js/`, `sw.js`, `manifest.json`, `icons/`, `data/verses.json`) |
 | gas/app/ | Apps Script 서버. 진도를 구글 시트에 저장 (five-people-garden과 같은 구조) |
 | gas/test/ | Node 흉내 환경: 서버 논리 시험(`run.js`)과 흉내 서버(`server.js`) |
+| web/audio/ | 들어 보기 음원. 목소리마다 `manifest.json`(덩어리 시간표)과 구절별 `ref.m4a`(주소), `text.m4a`(본문) |
+| tools/tts/ | 음원 만들기(`make.py`), 목소리 설계(`voices.py`), 따라 말하기 덩어리(`chunks.txt`) |
 | web/push0/ | 알림 0단계 시험용 홈 화면 앱(아이들 앱과 따로). 본 기능을 만들면 지운다 |
 | design/ | 시안 (`mockup.html` 앱, `reminders.html` 말씀 알림) |
 | 어린이_암송구절_회복역_최신.json | 구절 원본. `web/data/verses.json`은 이 파일을 그대로 복사한 것 |
@@ -36,6 +38,21 @@
 3. 배포 → 새 배포 → 웹 앱(실행: 나, 액세스: 모든 사용자). 나온 `/exec` 주소를 `web/js/config.js`의 `PROD_API`에 넣는다.
 
 코드를 고친 뒤에는 `clasp push` 하고 `clasp create-deployment -i <배포 id> -d "…"`로 같은 주소를 유지한다. 배포 id는 `web/js/config.js` 주소의 `/s/` 뒤 값이다. 화면 파일을 바꾸면 `web/sw.js`의 `VERSION`을 올린다.
+
+## 들어 보기 음원
+
+목소리 다섯 개(주일학교 선생님, 다정한 언니, 든든한 아빠, 또박또박 선생님, 이야기 할아버지)로 100구절을 Gemini TTS로 미리 만들어 `web/audio/`에 둔다. 앱은 Gemini를 부르지 않는다. 음원이 없는 구절은 기기 목소리로 읽는다.
+
+1. API 키를 `tools/tts/.env`에 `GEMINI_API_KEY=...`로 둔다(저장소에 올리지 않음).
+2. 무료 등급: `python3 tools/tts/make.py daily --loop`. 1번 구절부터 다섯 목소리를 같이 만들고, 하루 한도를 다 쓰면 다음 한도(미국 태평양 시간 자정, 한국 16시·서머타임 끝나면 17시)까지 기다렸다가 이어서 만든다. 다 만들면 스스로 끝난다. 뒤에서 돌릴 때는 `nohup caffeinate -i python3 -u tools/tts/make.py daily --loop >> tools/tts/out/daily.log 2>&1 &`. 진행은 `python3 tools/tts/make.py status`.
+   - 유료 키: `python3 tools/tts/make.py build --voice teacher` (다른 목소리는 `sister`, `dad`, `clear`, `storyteller`). `--ids 1-10`으로 일부만 만들 수 있다. 이미 만든 구절은 건너뛴다.
+   - 한 모델의 한도를 다 쓰면 다음 모델(3.8 → 3.1 → 2.5)로 간다. 어느 모델로 만들었는지는 manifest의 `model`에 남는다.
+3. 끝에 "확인 필요"가 붙은 구절은 받아쓰기가 본문과 달랐던 것이다. `tools/tts/out/heard/<목소리>.json`을 보고 `--ids <번호> --force`로 다시 만든다.
+
+- 구절마다 주소와 본문을 한 번에 합성하고, 덩어리 사이 쉼을 찾아 시간표를 뽑는다(덩어리는 `chunks.txt`, 이으면 본문과 같아야 한다). 쉼은 0.4초로 맞춘다.
+- 합성 원본은 `tools/tts/out/raw/`에 남는다. 덩어리만 다시 나눌 때는 `resplit --voice <목소리>`로 합성 없이 한다.
+- 무료 등급은 모델마다 하루 10번이라 100구절×5목소리(500번)는 유료 등급 키가 있어야 한다.
+- 음원을 바꾸면 `manifest.json`의 `v`가 바뀌어 앱이 새 파일을 받는다. `sw.js`의 VERSION은 화면 파일을 바꿀 때만 올린다.
 
 ## 알림 0단계
 

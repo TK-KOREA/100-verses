@@ -1,7 +1,7 @@
 // 시작, 화면 이동, 아래 탭.
 import { h, icon, hideToast } from './ui.js';
 import * as P from './progress.js';
-import * as S from './speech.js';
+import * as Sh from './sheet.js';
 import * as V from './views.js';
 
 V.applyFontLevel(); // 첫 화면을 그리기 전에 글자 크기와 화면 색을 맞춘다.
@@ -114,7 +114,7 @@ function render({ keepScroll = false, first = false } = {}) {
     prev.view.cleanup?.();
   }
   if (!keepScroll) {
-    S.stop();
+    // 들어 보기는 화면이 바뀌어도 이어진다(작은 재생 줄). 판만 닫는다.
     hideToast();
     app.closeOverlay();
   }
@@ -141,6 +141,7 @@ function render({ keepScroll = false, first = false } = {}) {
   }
   if (!first && !keepScroll) main.querySelector('h1')?.focus({ preventScroll: true });
   view.after?.(restored);
+  Sh.afterRender();
 }
 
 // 진도가 바뀌면 지금 화면을 새로 그린다. 연습·설정 화면은 스스로 일부만 고친다.
@@ -170,9 +171,8 @@ document.addEventListener('visibilitychange', () => {
     P.sync();
     const cur = app.current;
     if (cur && !cur.view.update && !app.overlay && sig() !== signature) render({ keepScroll: true });
-  } else {
-    S.stop();
   }
+  // 화면이 꺼지거나 다른 앱으로 가도 들어 보기는 이어진다(잠금 화면에서 멈출 수 있다).
 });
 
 async function boot() {
@@ -193,6 +193,7 @@ async function boot() {
     if (g && g.topic === v.topic) g.verses.push(v);
     else app.groups.push({ topic: v.topic, verses: [v] });
   }
+  Sh.init(app);
   render({ first: true });
   P.sync();
   P.keepStorage();

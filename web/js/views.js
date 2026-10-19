@@ -3,6 +3,8 @@
 import { h, icon, toast } from './ui.js';
 import * as P from './progress.js';
 import * as S from './speech.js';
+import * as Pl from './player.js';
+import { speakButton } from './sheet.js';
 import * as L from './listen.js';
 import * as G from './gems.js';
 
@@ -128,26 +130,6 @@ function shareButton(v) {
       }
     },
   }, icon('share'), '보내기');
-}
-
-function speakButton(v, iconOnly = false) {
-  if (!S.canSpeak) return null;
-  const btn = h('button', { type: 'button', class: iconOnly ? 'icon-btn' : 'btn secondary small' });
-  const paint = (on) => {
-    btn.setAttribute('aria-pressed', String(on));
-    btn.replaceChildren(icon(on ? 'stop' : 'speak'));
-    if (iconOnly) btn.setAttribute('aria-label', on ? '멈추기' : '들어 보기');
-    else btn.append(on ? '멈추기' : '들어 보기');
-  };
-  paint(false);
-  btn.addEventListener('click', () => {
-    if (btn.getAttribute('aria-pressed') === 'true') {
-      S.stop();
-    } else if (S.speak(v, () => paint(false))) {
-      paint(true);
-    }
-  });
-  return btn;
 }
 
 /** 같은 구절이 바퀴마다 따로 들어 있으면 하나만 둔다. */
@@ -431,7 +413,7 @@ export function verse(app, id) {
     );
   }
   function startListen() {
-    S.stop();
+    Pl.stop(); // 읽어 주는 소리를 말로 알아듣지 않게
     const before = new Set(opened);
     listenMsg = '듣고 있어요. 외운 대로 말해 봐요';
     stopListen = L.listen({
@@ -565,7 +547,7 @@ export function verse(app, id) {
   }
 
   function climb() {
-    S.stop();
+    Pl.stop();
     endListen();
     P.setMark(v.id, true);
     celebrate(app, v);
@@ -951,7 +933,7 @@ export function pocket(app, key) {
     mine.map((v) => h('article', { class: 'card pv' },
       h('div', { class: 'pv-head' },
         h('h2', { class: 'ref' }, v.refLong),
-        speakButton(v, true)),
+        speakButton(v, true, { pocket: { key: s.key, label: '이 주머니', ids: s.ids } })),
       h('p', { class: 'verse' }, v.text))),
     later.length ? h('h2', { class: 'sec-t' }, '더 외우면 생겨요') : null,
     later.map((v) => h('button', { type: 'button', class: 'locked', onclick: () => app.go('#/verse/' + v.id) },
@@ -1091,17 +1073,30 @@ export function settings(app, _id, query) {
 
   const fontSeg = fontPicker();
 
-  const speedSeg = S.canSpeak ? h('div', { class: 'seg', role: 'radiogroup', 'aria-label': '읽어 주는 빠르기', style: 'margin-top:0' }) : null;
+  // 읽어 주기: 목소리(누르면 고르고 들려준다)와 빠르기
+  const voiceBox = h('div', { class: 'voice-list', role: 'radiogroup', 'aria-label': '목소리' });
+  const speedSeg = h('div', { class: 'seg', role: 'radiogroup', 'aria-label': '읽어 주는 빠르기', style: 'grid-template-columns:repeat(2,1fr)' });
   function paintSpeed() {
-    if (!speedSeg) return;
+    const cur = Pl.prefs().voice;
+    voiceBox.replaceChildren(...Pl.VOICES.filter((x) => x.key !== 'device' || S.canSpeak).map((x) => h('button', {
+      type: 'button',
+      role: 'radio',
+      class: 'voice',
+      'aria-checked': String(cur === x.key),
+      onclick: () => {
+        Pl.setPref('voice', x.key);
+        Pl.preview(x.key);
+        paintSpeed();
+      },
+    }, h('b', null, x.name), h('span', null, x.who), icon('speak'))));
     const slow = S.isSlow();
     speedSeg.replaceChildren(
-      ...[['보통', false], ['느리게', true]].map(([label, val]) => h('button', {
+      ...[['보통', false], ['천천히', true]].map(([label, val]) => h('button', {
         type: 'button',
         role: 'radio',
         'aria-checked': String(slow === val),
         onclick: () => {
-          S.setSlow(val);
+          Pl.setSlow(val);
           paintSpeed();
         },
       }, label)),
@@ -1140,7 +1135,12 @@ export function settings(app, _id, query) {
       themePicker(),
       h('p', { class: 'help' }, '보석빛은 지금 외우는 보석 색으로 바뀌어요. 등불은 자기 전에 쓰기 좋게 늘 어두워요.'),
     ),
-    speedSeg ? h('section', { class: 'section' }, h('h2', null, '읽어 주는 빠르기'), speedSeg) : null,
+    h('section', { class: 'section' },
+      h('h2', null, '읽어 주기'),
+      h('p', { class: 'help', style: 'margin-top:0' }, '목소리를 누르면 골라지고 조금 들려줘요.'),
+      voiceBox,
+      h('h3', { class: 'sub-h' }, '빠르기'),
+      speedSeg),
     h('section', { class: 'section' }, h('h2', null, '저장 상태'), h('div', { class: 'card' }, statusBox)),
     h('section', { class: 'section', id: 'home-section' },
       h('h2', null, '홈 화면에 추가하기'),
