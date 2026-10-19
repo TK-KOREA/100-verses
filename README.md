@@ -44,7 +44,7 @@
 목소리 다섯 개(주일학교 선생님, 다정한 언니, 든든한 아빠, 또박또박 선생님, 이야기 할아버지)로 100구절을 Gemini TTS로 미리 만들어 `web/audio/`에 둔다. 앱은 Gemini를 부르지 않는다. 음원이 없는 구절은 기기 목소리로 읽는다.
 
 1. API 키를 `tools/tts/.env`에 `GEMINI_API_KEY=...`로 둔다(저장소에 올리지 않음).
-2. 무료 등급: `python3 tools/tts/make.py daily --loop`. 1번 구절부터 다섯 목소리를 같이 만들고, 하루 한도를 다 쓰면 다음 한도(미국 태평양 시간 자정, 한국 16시·서머타임 끝나면 17시)까지 기다렸다가 이어서 만든다. 다 만들면 스스로 끝난다. 뒤에서 돌릴 때는 `nohup caffeinate -i python3 -u tools/tts/make.py daily --loop >> tools/tts/out/daily.log 2>&1 &`. 진행은 `python3 tools/tts/make.py status`.
+2. 무료 등급: `python3 tools/tts/make.py daily --loop`. 1번 구절부터 다섯 목소리를 같이 만들고, 하루 한도를 다 쓰면 다음 한도(미국 태평양 시간 자정, 한국 16시·서머타임 끝나면 17시)까지 기다렸다가 이어서 만든다. 다 만들면 스스로 끝난다. 뒤에서 돌릴 때는 `nohup caffeinate -i python3 -u tools/tts/make.py daily --loop --publish >> tools/tts/out/daily.log 2>&1 &`. `--publish`는 한 번 만들 때마다 `web/audio`만 커밋하고 main에 push해 운영에 반영한다(main이 아니거나 안 올린 다른 커밋이 있으면 건너뛴다). 진행은 `python3 tools/tts/make.py status`.
    - 유료 키: `python3 tools/tts/make.py build --voice teacher` (다른 목소리는 `sister`, `dad`, `clear`, `storyteller`). `--ids 1-10`으로 일부만 만들 수 있다. 이미 만든 구절은 건너뛴다.
    - 한 모델의 한도를 다 쓰면 다음 모델(3.8 → 3.1 → 2.5)로 간다. 어느 모델로 만들었는지는 manifest의 `model`에 남는다.
 3. 끝에 "확인 필요"가 붙은 구절은 받아쓰기가 본문과 달랐던 것이다. `tools/tts/out/heard/<목소리>.json`을 보고 `--ids <번호> --force`로 다시 만든다.

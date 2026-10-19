@@ -541,6 +541,7 @@ def main() -> None:
     ap.add_argument("--samples", action="store_true", help="resplit: 시험 음원 폴더에서")
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--no-ears", action="store_true", help="받아쓰기 확인을 건너뜀")
+    ap.add_argument("--publish", action="store_true", help="daily: 한 번 만들 때마다 web/audio만 커밋하고 push해 운영에 반영")
     ap.add_argument("--loop", action="store_true", help="daily: 한도를 다 쓰면 다음 한도(태평양 자정)까지 기다렸다가 이어서, 다 만들 때까지")
     a = ap.parse_args()
 
@@ -622,6 +623,8 @@ def main() -> None:
         one_pass()
         if a.cmd in ("daily", "build", "verify"):
             status(store, all_ids)
+        if a.publish and not sample:
+            publish(store, all_ids)
         if not a.loop or not left():
             if a.loop:
                 print("다 만들었어요. 끝냅니다.", flush=True)
@@ -634,6 +637,49 @@ def main() -> None:
 
 
 KST = ZoneInfo("Asia/Seoul")
+
+
+def git(*args) -> subprocess.CompletedProcess:
+    return subprocess.run(["git", "-C", str(ROOT), *args], capture_output=True, text=True)
+
+
+AUDIO_SUBJECT = "들어 보기 음원 더하기"
+
+
+def publish(store: Store, ids: list) -> None:
+    """새로 만든 음원(web/audio)만 커밋하고 push한다. 다른 파일은 건드리지 않는다.
+    GitHub Pages가 main을 그대로 올리므로 push하면 운영에 반영된다.
+    main이 아닌 가지에 있거나, 아직 안 올린 다른 커밋이 있으면 손대지 않는다."""
+    branch = git("rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+    if branch != "main":
+        print(f"지금 가지가 {branch}라 운영 반영을 건너뜁니다(main에서만 합니다).", flush=True)
+        return
+    git("fetch", "-q", "origin", "main")
+    if git("status", "--porcelain", "--", "web/audio").stdout.strip():
+        counts = ", ".join(f"{VOICES[k]['name']} {sum(1 for i in ids if str(i) in store.man(k)['verses'])}" for k in VOICES)
+        msg = (f"{AUDIO_SUBJECT} ({time.strftime('%Y-%m-%d')})\n\n지금까지 만든 구절: {counts}\n\n"
+               "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>")
+        git("add", "--", "web/audio")
+        c = git("commit", "-q", "-m", msg, "--", "web/audio")
+        if c.returncode != 0:
+            print("커밋 실패: " + (c.stderr or c.stdout).strip()[-300:], flush=True)
+            return
+    ahead = [x for x in git("log", "origin/main..HEAD", "--format=%s").stdout.splitlines() if x]
+    if not ahead:
+        print("운영에 반영할 새 음원이 없어요.", flush=True)
+        return
+    if any(not x.startswith(AUDIO_SUBJECT) for x in ahead):
+        print("아직 올리지 않은 다른 커밋이 있어 push를 건너뜁니다(음원 커밋은 남겨 둡니다).", flush=True)
+        return
+    p = None
+    for attempt in range(2):
+        p = git("push", "-q", "origin", "main")
+        if p.returncode == 0:
+            print("운영에 반영했어요: " + git("log", "--oneline", "-1").stdout.strip(), flush=True)
+            return
+        # 다른 곳에서 먼저 push했으면 받아서 위에 올린 뒤 다시 보낸다.
+        git("pull", "-q", "--rebase", "--autostash", "origin", "main")
+    print("push 실패(다음 번에 다시 해 봅니다): " + p.stderr.strip()[-300:], flush=True)
 
 
 def next_reset() -> datetime:
