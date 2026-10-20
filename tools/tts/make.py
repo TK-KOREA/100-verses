@@ -16,6 +16,9 @@ from __future__ import annotations
 
 import argparse
 import array
+import io
+import wave
+from difflib import SequenceMatcher
 import hashlib
 import json
 import os
@@ -38,9 +41,11 @@ RATE = 24000
 MODELS = [m for m in os.environ.get("TTS_MODELS", "").split(",") if m] or [
     "gemini-3.8-flash-tts", "gemini-3.1-flash-tts-preview", "gemini-2.5-flash-preview-tts", "gemini-2.5-pro-preview-tts"]
 BITRATE = "48k"
-HEAR_MODELS = ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-flash-latest"]  # 받아쓰기 확인
+# 받아쓰기(모델마다 무료 한도가 따로). lite 모델은 조각마다 따로 답하지 못하고 낱말을 늘어놓아 쓰지 않는다.
+HEAR_MODELS = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-flash-latest"]
 PAD = 0.12  # 앞뒤에 남길 쉼(초)
 GAP = 0.4  # 덩어리 사이 쉼(초)
+PIECE_GAP = 0.25  # 받아쓰기 조각을 나누는 쉼(초)
 
 # ---------- 글 ----------
 
@@ -363,41 +368,134 @@ def fade(pcm: bytes, fin: float = 0.0, fout: float = 0.0) -> bytes:
     return a.tobytes()
 
 
-def trim_and_time(pcm: bytes, weights: list):
+def norm(t: str) -> str:
+    """맞춰 보기용: 띄어쓰기와 문장부호를 뺀다."""
+    return re.sub(r"[^0-9A-Za-z가-힣]", "", str(t))
+
+
+def _mapper(blocks):
+    """받아쓴 글의 글자 자리 → 본문 글자 자리. 맞는 곳은 그대로, 사이는 비율로."""
+    def f(p):
+        pa = pb = 0
+        for a, b, size in blocks:
+            if p < a:
+                return b if a == pa else pb + (p - pa) * (b - pb) / (a - pa)
+            if p <= a + size:
+                return b + (p - a)
+            pa, pb = a + size, b + size
+        return pb
+    return f
+
+
+def align_bounds(pcm: bytes, lead: float, tail: float, inner: list, units: list):
+    """쉼마다 자른 조각을 받아쓰게 하고, 받아쓴 글을 본문과 글자 단위로 맞춰 덩어리 경계를 정한다.
+    덩어리가 끝나는 글자 자리에 쉼이 있으면 그 쉼, 쉬지 않고 이어 읽었으면 조각 안을 글자 비율로 나눈다.
+    반환: (경계 목록[(a,b)], 글이 맞는지, 정보) — 받아쓰기를 못 했으면 None."""
+    inner = [r for r in inner if r[1] - r[0] >= PIECE_GAP]  # 짧은 쉼(어절 사이)은 조각을 나누지 않는다
+    pieces = list(zip([lead] + [r[1] for r in inner], [r[0] for r in inner] + [tail]))
+    got = hear_pcm([pcm[int(s0 * RATE) * 2:int(s1 * RATE) * 2] for s0, s1 in pieces])
+    if got is None or len(got) != len(pieces):
+        return None
+    T = [norm(g) for g in got]
+    C = [norm(u) for u in units]
+    sm = SequenceMatcher(None, "".join(T), "".join(C), autojunk=False)
+    f = _mapper(sm.get_matching_blocks())
+    ends, acc = [], 0
+    for t in T:
+        acc += len(t)
+        ends.append(acc)
+    pend = [f(e) for e in ends]  # 조각 끝의 본문 글자 자리
+    pstart = [0.0] + pend[:-1]
+    targets, acc = [], 0
+    for c in C[:-1]:
+        acc += len(c)
+        targets.append(acc)
+    pick, last, approx = [], -1, 0
+    for bk in targets:
+        cand = range(last + 1, len(pieces) - 1)
+        j = min(cand, key=lambda x: abs(pend[x] - bk)) if cand else None
+        if j is not None and abs(pend[j] - bk) <= 1.5:
+            pick.append(inner[j])
+            last = j
+            continue
+        # 쉬지 않고 이어 읽은 자리
+        q = next((x for x in range(max(last + 1, 0), len(pieces)) if pend[x] > bk), len(pieces) - 1)
+        s0, s1 = pieces[q]
+        r = (bk - pstart[q]) / max(1e-6, pend[q] - pstart[q])
+        t = s0 + (s1 - s0) * min(0.95, max(0.05, r))
+        pick.append((t, t))
+        last = q - 1
+        approx += 1
+    times = [x for r in pick for x in r]
+    if any(b2 < a2 for a2, b2 in zip(times, times[1:])):
+        return None
+    # 덩어리 길이가 글자 수에 견주어 말이 안 되면(한 글자에 0.04초 미만, 0.8초+1.5초 넘음) 맞춤이 틀린 것
+    edges = [lead] + times + [tail]
+    for (s0, s1), c in zip(zip(edges[0::2], edges[1::2]), C):
+        if s1 - s0 < 0.04 * len(c) or s1 - s0 > 0.8 * len(c) + 1.5:
+            return None
+    ratio = sm.ratio()
+    if ratio < 0.6:  # 받아쓰기가 엉뚱하다(조각과 답이 어긋남). 믿지 않고 다음에 다시 듣는다.
+        return None
+    return pick, ratio >= 0.9, {"heard": got, "ratio": round(ratio, 3), "approx": approx}
+
+
+def trim_and_time(pcm: bytes, units: list, ears: bool):
     """앞뒤 쉼을 PAD만 남기고, 덩어리 사이 쉼은 GAP 길이로 맞춘다.
     Gemini는 [short pause]를 1~2초로 길게 쉬어서 그대로 두면 그냥 들을 때 늘어진다.
-    따라 말하기 틈은 앱이 덩어리 끝에서 멈춰 준다. (새 pcm, [[시작,끝]...], 경계를 다 찾았는지, 길이)"""
+    따라 말하기 틈은 앱이 덩어리 끝에서 멈춰 준다.
+    경계는 받아쓰기로 맞추고(align_bounds), 받아쓰기를 못 하면 쉼 길이와 글자 수로 어림한다(pick_bounds).
+    반환: (새 pcm, [[시작,끝]...], 맞는지, 길이, 정보)"""
     pcm = strip_noise_tail(strip_noise_head(pcm))
     runs, dur = silences(pcm)
     lead = runs[0][1] if runs and runs[0][0] <= 0.01 else 0.0
     tail = runs[-1][0] if runs and runs[-1][1] >= dur - 0.02 else dur
     inner = [r for r in runs if r[0] > lead + 0.05 and r[1] < tail - 0.05]
-    pick, ok = pick_bounds(inner, lead, tail, weights)
+    got = align_bounds(pcm, lead, tail, inner, units) if ears else None
+    if got:
+        pick, ok, info = got
+    else:
+        pick, ok = pick_bounds(inner, lead, tail, [weight(u) for u in units])
+        info = {"unheard": True}
     edges = [lead] + [x for r in pick for x in r] + [tail]
     speech = [(edges[i], edges[i + 1]) for i in range(0, len(edges), 2)]
 
     def cut(t0, t1):
         return pcm[int(t0 * RATE) * 2:int(t1 * RATE) * 2]
 
-    out, times, t = bytearray(), [], 0.0
+    def squeeze(t0, t1):
+        """덩어리 안쪽의 긴 쉼(쉼표 등)도 GAP으로 줄인다."""
+        res, at = bytearray(), t0
+        for a2, b2 in runs:
+            if a2 >= t0 and b2 <= t1 and b2 - a2 > GAP:
+                res += fade(cut(at, a2 + GAP / 2), fout=0.005)
+                res += fade(cut(b2 - GAP / 2, b2), fin=0.005)
+                at = b2
+        res += cut(at, t1)
+        return bytes(res)
+
+    out, times = bytearray(), []
     out += cut(max(0.0, lead - PAD), lead)
     t = len(out) / 2 / RATE
     for k, (s0, s1) in enumerate(speech):
+        joined = k and pick[k - 1][1] > pick[k - 1][0]  # 쉼을 줄인 자리(이어 읽은 자리는 그대로 잇는다)
         # 쉼을 줄인 자리는 소리가 이어지지 않으므로 앞뒤를 5ms씩 서서히
-        out += fade(cut(s0, s1), fin=0.005 if k else 0.0)
-        times.append([round(t, 2), round(t + s1 - s0, 2)])
-        t += s1 - s0
-        if k < len(speech) - 1:
+        seg = fade(squeeze(s0, s1), fin=0.005 if joined else 0.0)
+        out += seg
+        n = len(seg) / 2 / RATE
+        times.append([round(t, 2), round(t + n, 2)])
+        t += n
+        if k < len(speech) - 1 and pick[k][1] > pick[k][0]:
             g = min(GAP, pick[k][1] - pick[k][0])
             out += fade(cut(s1, s1 + g), fout=0.005)  # 원래 쉼의 앞부분(숨, 잔향)을 남긴다
             t += g
     out += cut(tail, min(dur, tail + PAD))
-    return bytes(out), times, ok, round(len(out) / 2 / RATE, 2)
+    return bytes(out), times, ok, round(len(out) / 2 / RATE, 2), info
 
 
-def split_ref(pcm: bytes, ref: str, chunks: list):
+def split_ref(pcm: bytes, ref: str, chunks: list, ears: bool):
     """[주소, 덩어리...]로 합성된 소리를 주소 파일과 본문 파일로 나눈다."""
-    allp, times, ok, _ = trim_and_time(pcm, [weight(ref)] + [weight(c) for c in chunks])
+    allp, times, ok, _, info = trim_and_time(pcm, [ref] + chunks, ears)
     (rs, re_), (ts, _) = times[0], times[1]
     cut = int(((re_ + ts) / 2) * RATE) * 2  # 주소와 본문 사이 쉼의 가운데
     rp, tp = allp[:int(min(re_ + PAD, ts) * RATE) * 2], allp[cut:]
@@ -407,7 +505,7 @@ def split_ref(pcm: bytes, ref: str, chunks: list):
         drop = int((lead - PAD) * RATE) * 2
         tp, off = tp[drop:], off + drop / 2 / RATE
     tt = [[round(a - off, 2), round(b - off, 2)] for a, b in times[1:]]
-    return rp, tp, tt, ok, round(len(rp) / 2 / RATE, 2), round(len(tp) / 2 / RATE, 2)
+    return rp, tp, tt, ok, round(len(rp) / 2 / RATE, 2), round(len(tp) / 2 / RATE, 2), info
 
 
 def to_m4a(pcm: bytes, path: Path) -> None:
@@ -426,58 +524,65 @@ def to_m4a(pcm: bytes, path: Path) -> None:
 
 # ---------- 만들기 ----------
 
-def norm(t: str) -> str:
-    return re.sub(r"[\s,.?!:;“”‘’\"'()]", "", str(t))
-
-
-def hear(path_and_spans: list) -> list:
-    """잘라 낸 조각들을 Gemini에게 받아쓰게 한다(덩어리 경계와 더하거나 뺀 말 확인용)."""
+def hear_pcm(pieces: list):
+    """소리 조각들을 Gemini에게 받아쓰게 한다. 한도를 다 썼거나 실패하면 None."""
+    key = hashlib.sha1(b"".join(hashlib.sha1(pc).digest() for pc in pieces)).hexdigest()[:16]
+    cache = HERE / "out/hearcache" / f"{key}.json"
+    if cache.exists():
+        return json.loads(cache.read_text())
     from google.genai import types
     synth_client()
-    parts = ["아래 한국어 음성 조각들을 각각 들리는 그대로 받아써 주세요. 고치거나 더하지 말고, "
-             "조각 순서대로 JSON 문자열 배열로만 답하세요. 소리가 없으면 빈 문자열."]
-    for i, (path, a, b) in enumerate(path_and_spans):
-        cmd = ["ffmpeg", "-loglevel", "error"] + (["-ss", str(a), "-to", str(b)] if b else []) + \
-              ["-i", str(path), "-ac", "1", "-ar", "16000", "-f", "wav", "pipe:1"]
-        wav = subprocess.run(cmd, capture_output=True).stdout
-        parts += [f"조각 {i + 1}:", types.Part.from_bytes(data=wav, mime_type="audio/wav")]
+    parts = [f"아래 한국어 음성 조각 {len(pieces)}개를 하나씩 들리는 그대로 받아써 주세요. 고치거나 더하지 말고, 숫자는 숫자로. "
+             "조각 하나에 답 하나입니다. 조각 안의 말을 낱말로 나누지 마세요. "
+             '[{"n": 1, "text": "..."}, ...] 꼴의 JSON 배열로만 답하세요. 소리가 없으면 text는 빈 문자열.']
+    for i, pc in enumerate(pieces):
+        buf = io.BytesIO()
+        with wave.open(buf, "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(RATE)
+            w.writeframes(pc)
+        parts += [f"조각 {i + 1}:", types.Part.from_bytes(data=buf.getvalue(), mime_type="audio/wav")]
     cfg = types.GenerateContentConfig(response_mime_type="application/json")
     try:
         got, _ = call(HEAR_MODELS, lambda m: json.loads(
             _client.models.generate_content(model=m, contents=parts, config=cfg).text))
-        return got
-    except QuotaDone:
-        return None  # 받아쓰기 한도를 다 씀 → 확인은 나중에(verify)
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001  (QuotaDone 포함: 확인은 다음 날로)
         return None
+    try:
+        byn = {int(x["n"]): str(x.get("text", "")) for x in got}
+        got = [byn[i + 1] for i in range(len(pieces))]
+    except Exception:  # noqa: BLE001  (조각 수와 안 맞는 답)
+        return None
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    cache.write_text(json.dumps(got, ensure_ascii=False))
+    return got
 
 
-def finish(pcm: bytes, ref: str, chunks: list, d: Path, model: str, want: dict, check_ears: bool) -> dict:
-    rp, tp, times, ok, rdur, tdur = split_ref(pcm, ref, chunks)
+def finish(pcm: bytes, ref: str, chunks: list, d: Path, model: str, want: dict, ears: bool,
+           only_aligned: bool = False):
+    rp, tp, times, ok, rdur, tdur, info = split_ref(pcm, ref, chunks, ears)
+    if only_aligned and info.get("unheard"):
+        return None  # 받아쓰기로 못 맞췄으면 파일을 건드리지 않는다
     hv = to_m4a(rp, d / "ref.m4a") + to_m4a(tp, d / "text.m4a")
     # v: 소리 파일이 바뀌면 바뀌는 표시. 앱이 주소 끝에 붙여 옛 저장본을 쓰지 않게 한다.
     e = {**want, "v": hashlib.sha1(hv.encode()).hexdigest()[:8], "model": model, "ref": ref, "refDur": rdur, "dur": tdur,
-         "chunks": [{"t": c, "s": t[0], "e": t[1]} for c, t in zip(chunks, times)], "check": not ok}
-    if check_ears:
-        listen_check(e, d)
+         "chunks": [{"t": c, "s": t[0], "e": t[1]} for c, t in zip(chunks, times)]}
+    if info.get("unheard"):
+        e["unheard"] = True  # 받아쓰기를 못 해 쉼으로 어림했다. 다음 날 받아쓰기로 다시 맞춘다.
+        e["check"] = False
     else:
-        e["unheard"] = True
+        e["align"] = "text"  # 받아쓰기로 맞춘 경계
+        e["check"] = not ok  # 받아쓴 글이 본문과 많이 다르다(잘못 읽었을 수 있다)
+        e["heard"] = info["heard"]
+        e["match"] = info["ratio"]
+        if info["approx"]:
+            e["joined"] = info["approx"]  # 쉬지 않고 이어 읽어 글자 비율로 나눈 경계 수
+    # 너무 긴 소리(모델이 오래 멈추거나 헛소리를 붙임): 글자당 0.45초, 적어도 20초를 넘으면 다시 만든다
+    if tdur > max(20.0, len(norm("".join(chunks))) * 0.45):
+        e["check"] = True
+        e["long"] = True
     return e
-
-
-def listen_check(e: dict, d: Path) -> None:
-    """받아쓰기로 주소와 덩어리를 확인해 e["check"]를 정한다. 한도를 다 써서 못 들었으면 unheard로 둔다."""
-    texts = [e["ref"]] + [c["t"] for c in e["chunks"]]
-    got = hear([(d / "ref.m4a", 0, 0)] + [(d / "text.m4a", c["s"], c["e"]) for c in e["chunks"]])
-    if got is None:
-        e["unheard"] = True
-        return
-    e.pop("unheard", None)
-    bad = [i for i, (w, g) in enumerate(zip(texts, got)) if norm(w) != norm(g)]
-    if len(got) != len(texts):
-        bad = bad or [-1]
-    e["heard"] = got
-    e["check"] = bool(bad) or e["check"]
 
 
 def raw_path(key: str, vid: int) -> Path:
@@ -511,7 +616,7 @@ def make_one(v: dict, key: str, out: Path, fixes: dict, entry: dict | None, forc
     return e
 
 
-def resplit(v: dict, key: str, out: Path, fixes: dict, entry: dict, ears: bool) -> dict:
+def resplit(v: dict, key: str, out: Path, fixes: dict, entry: dict, ears: bool, only_aligned: bool = False):
     """합성은 다시 하지 않고 저장해 둔 소리로 덩어리만 다시 나눈다."""
     chunks = chunks_of(v["text"], fixes, v["id"])
     ref = spoken_ref(v)
@@ -524,7 +629,12 @@ def resplit(v: dict, key: str, out: Path, fixes: dict, entry: dict, ears: bool) 
         pcm = b"".join(subprocess.run(["ffmpeg", "-loglevel", "error", "-i", str(d / n), "-f", "s16le", "-ac", "1",
                                        "-ar", str(RATE), "pipe:1"], capture_output=True).stdout
                        for n in ("ref.m4a", "text.m4a"))
-    return finish(pcm, ref, chunks, d, entry["model"], want, ears)
+    e = finish(pcm, ref, chunks, d, entry["model"], want, ears, only_aligned)
+    if e is not None:
+        for k in ("tries",):
+            if k in entry:
+                e[k] = entry[k]
+    return e
 
 
 def parse_ids(s: str | None, all_ids: list[int]) -> list[int]:
@@ -637,17 +747,30 @@ def main() -> None:
         made = 0
         _spent.clear()  # 새 날이면 한도가 다시 생긴다
         try:
-            if a.cmd in ("daily", "verify"):  # 받아쓰기를 못 한 것부터 듣는다(합성 한도는 안 쓴다)
+            if a.cmd in ("daily", "verify"):
+                # 1) 받아쓰기로 경계를 맞추지 않은 것을 다시 맞춘다(합성 한도는 안 쓴다)
                 for k, i in jobs:
                     e = store.man(k)["verses"].get(str(i))
-                    if e and e.get("unheard"):
+                    if e and e.get("align") != "text":
                         t0 = time.time()
-                        listen_check(e, store.base / k / f"{i:03d}")
-                        if not e.get("unheard"):
+                        e = resplit(by_id[i], k, store.base / k, fixes, e, True, only_aligned=True)
+                        if e is not None:
                             store.put(k, i, e)
-                            print(line(k, i, e, t0) + "  (받아쓰기)", flush=True)
+                            print(line(k, i, e, t0) + "  (받아쓰기로 다시 맞춤)", flush=True)
                 if a.cmd == "verify":
                     return 0
+                # 2) "확인 필요"(잘못 읽었거나 너무 긴 것)를 다시 만든다. 구절마다 두 번까지.
+                for k, i in jobs:
+                    old = store.man(k)["verses"].get(str(i))
+                    # 받아쓰기로 맞춰 본 뒤에도 "확인 필요"인 것만(쉼으로 어림한 옛 표시는 믿지 않는다)
+                    if old and old.get("check") and (old.get("align") == "text" or old.get("long")) \
+                            and old.get("tries", 0) < 2:
+                        t0 = time.time()
+                        e = make_one(by_id[i], k, store.base / k, fixes, old, True, ears)
+                        e["tries"] = old.get("tries", 0) + 1
+                        store.put(k, i, e)
+                        made += 1
+                        print(line(k, i, e, t0) + "  (다시 만듦)", flush=True)
             for k, i in jobs:
                 t0 = time.time()
                 old = store.man(k)["verses"].get(str(i))
