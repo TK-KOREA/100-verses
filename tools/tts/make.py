@@ -310,10 +310,64 @@ def pick_bounds(inner, lead, tail, weights):
     return out[::-1], True
 
 
+def zc_rate(pcm: bytes, t0: float, t1: float) -> float:
+    a = array.array("h")
+    a.frombytes(pcm[int(t0 * RATE) * 2:int(t1 * RATE) * 2])
+    n = sum(1 for i in range(1, len(a)) if (a[i - 1] < 0) != (a[i] < 0))
+    return n / max(1e-6, t1 - t0)
+
+
+def strip_noise_head(pcm: bytes) -> bytes:
+    """3.8 모델은 맨 앞 10ms에도 딸깍 소리가 있다. 바로 뒤가 조용하면 앞 30ms를 비운다."""
+    db = frames_db(pcm[:int(RATE * 0.1) * 2], int(RATE * 0.01))
+    if len(db) >= 6 and max(db[:2]) > -30 and max(db[3:6]) < -40:
+        n = int(RATE * 0.03) * 2
+        return bytes(n) + pcm[n:]
+    return pcm
+
+
+def strip_noise_tail(pcm: bytes) -> bytes:
+    """Gemini 소리 끝에 붙는 치지직(말이 끝나고 쉰 뒤 0.1~0.3초 시끄러운 잡음)을 잘라 낸다.
+    잡음은 쉼 바로 뒤에 갑자기 아주 크게(-15dB 넘게, 말소리보다 큼) 영점 교차 초당 4000번 넘게 나온다."""
+    for _ in range(3):
+        runs, dur = silences(pcm, min_len=0.08)
+        if not runs:
+            return pcm
+        last = runs[-1]
+        end = dur if last[1] < dur - 0.02 else last[0]  # 끝 쉼이 있으면 그 앞이 마지막 소리의 끝
+        prev = [r for r in runs if r[1] <= end - 0.01]
+        if not prev:
+            return pcm
+        start = prev[-1][1]  # 마지막 소리 덩이의 시작
+        if end - start > 0.35 or prev[-1][1] - prev[-1][0] < 0.08:
+            return pcm
+        seg = frames_db(pcm[int(start * RATE) * 2:int(end * RATE) * 2], int(RATE * 0.01))
+        level = sorted(seg)[len(seg) // 2] if seg else -100
+        if level < -15 or zc_rate(pcm, start, end) < 4000:
+            return pcm
+        pcm = pcm[:int(prev[-1][0] * RATE) * 2 + int(0.05 * RATE) * 2]  # 잡음 앞 쉼에서 자른다
+    return pcm
+
+
+def fade(pcm: bytes, fin: float = 0.0, fout: float = 0.0) -> bytes:
+    """앞뒤를 짧게 서서히(딸깍 소리 막기)."""
+    a = array.array("h")
+    a.frombytes(pcm[: len(pcm) // 2 * 2])
+    n = len(a)
+    k = min(n, int(fin * RATE))
+    for i in range(k):
+        a[i] = int(a[i] * i / k)
+    k = min(n, int(fout * RATE))
+    for i in range(k):
+        a[n - 1 - i] = int(a[n - 1 - i] * i / k)
+    return a.tobytes()
+
+
 def trim_and_time(pcm: bytes, weights: list):
     """앞뒤 쉼을 PAD만 남기고, 덩어리 사이 쉼은 GAP 길이로 맞춘다.
     Gemini는 [short pause]를 1~2초로 길게 쉬어서 그대로 두면 그냥 들을 때 늘어진다.
     따라 말하기 틈은 앱이 덩어리 끝에서 멈춰 준다. (새 pcm, [[시작,끝]...], 경계를 다 찾았는지, 길이)"""
+    pcm = strip_noise_tail(strip_noise_head(pcm))
     runs, dur = silences(pcm)
     lead = runs[0][1] if runs and runs[0][0] <= 0.01 else 0.0
     tail = runs[-1][0] if runs and runs[-1][1] >= dur - 0.02 else dur
@@ -329,12 +383,13 @@ def trim_and_time(pcm: bytes, weights: list):
     out += cut(max(0.0, lead - PAD), lead)
     t = len(out) / 2 / RATE
     for k, (s0, s1) in enumerate(speech):
-        out += cut(s0, s1)
+        # 쉼을 줄인 자리는 소리가 이어지지 않으므로 앞뒤를 5ms씩 서서히
+        out += fade(cut(s0, s1), fin=0.005 if k else 0.0)
         times.append([round(t, 2), round(t + s1 - s0, 2)])
         t += s1 - s0
         if k < len(speech) - 1:
             g = min(GAP, pick[k][1] - pick[k][0])
-            out += cut(s1, s1 + g)  # 원래 쉼의 앞부분(숨, 잔향)을 남긴다
+            out += fade(cut(s1, s1 + g), fout=0.005)  # 원래 쉼의 앞부분(숨, 잔향)을 남긴다
             t += g
     out += cut(tail, min(dur, tail + PAD))
     return bytes(out), times, ok, round(len(out) / 2 / RATE, 2)
@@ -357,6 +412,7 @@ def split_ref(pcm: bytes, ref: str, chunks: list):
 
 def to_m4a(pcm: bytes, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    pcm = fade(pcm, fin=0.005, fout=0.015)
     with tempfile.NamedTemporaryFile(suffix=".m4a", delete=False) as tf:
         tmp = tf.name
     cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "s16le", "-ar", str(RATE), "-ac", "1",
