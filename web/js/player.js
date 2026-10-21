@@ -55,7 +55,14 @@ const manifestNow = (voice) => manifests[voice + ':v'] || null;
 
 /** 이 구절을 그 목소리 음원으로 읽을 수 있으면 시간표를, 아니면 null. */
 export function entryFor(id, voice = prefs().voice) {
-  return manifestNow(voice)?.verses?.[id] || null;
+  return usable(manifestNow(voice)?.verses?.[id], byId[id]);
+}
+
+/** 음원 길이가 글자 수에 견주어 말이 안 되면(모델이 오래 멈춘 음원) 쓰지 않고 기기 목소리로 읽는다. */
+function usable(e, v) {
+  if (!e || !v) return null;
+  const n = v.text.replace(/[^0-9A-Za-z가-힣]/g, '').length;
+  return e.dur > n * 0.6 + 6 ? null : e;
 }
 
 // 음원은 통째로 받아 blob으로 튼다. 다음 구절을 미리 받아 두면 화면이 꺼져 있어도 끊기지 않는다.
@@ -206,10 +213,11 @@ async function startVerse() {
   const my = ++gen;
   const v = byId[st.queue[st.qi]];
   st.rep = 1;
+  st.part = null;
   st.voice = prefs().voice;
   const m = await manifest(st.voice);
   if (my !== gen || !st) return;
-  st.entry = m?.verses?.[v.id] || null;
+  st.entry = usable(m?.verses?.[v.id], v);
   st.parts = readingParts();
   st.pi = 0;
   mediaInfo(v);
@@ -249,12 +257,40 @@ function step() {
   }
 }
 
+let watch = 0;
+/** 틀고 있는 음원이 6초 넘게 나아가지 않으면(받다 멈춤 등) 실패로, 끝에 닿았는데 끝 알림이 없으면 끝으로 본다. */
+function guard(my, onEnd, onFail) {
+  clearInterval(watch);
+  let lastT = -1;
+  let still = 0;
+  let fired = false;
+  const once = (fn) => () => {
+    if (fired) return;
+    fired = true;
+    clearInterval(watch);
+    fn();
+  };
+  const end = once(onEnd);
+  const fail = once(onFail);
+  watch = setInterval(() => {
+    if (my !== gen || !st) return clearInterval(watch);
+    if (st.paused || audio.paused) return;
+    const t = audio.currentTime;
+    if (audio.duration && t >= audio.duration - 0.05) return end();
+    still = t === lastT ? still + 1 : 0;
+    lastT = t;
+    if (still >= 6) fail();
+  }, 1000);
+  return { end, fail };
+}
+
 function playClip(path, speech, onEnd, onFail) {
   const my = gen;
   clip(path).then((url) => {
     if (my !== gen || !st || st.paused) return;
-    audio.onended = onEnd;
-    audio.onerror = onFail;
+    const g = guard(my, onEnd, onFail);
+    audio.onended = g.end;
+    audio.onerror = g.fail;
     audio.src = url;
     audio.playbackRate = speech && S.isSlow() ? SLOW_RATE : 1;
     if ('preservesPitch' in audio) audio.preservesPitch = true;
@@ -316,6 +352,7 @@ function finish() {
 
 function stopNow() {
   gen++;
+  clearInterval(watch);
   clearTimeout(timer);
   if (audio) {
     audio.onended = null;
@@ -354,7 +391,13 @@ export function resume() {
   const part = st.parts[st.pi];
   if (st.entry && audio && audio.src && !part.startsWith('gap:') && audio.currentTime > 0 && !audio.ended) {
     const my = gen;
-    audio.onended = () => my === gen && st && advance();
+    const g = guard(my, () => my === gen && st && advance(), () => {
+      if (my !== gen || !st) return;
+      st.entry = null; // 이어 틀지 못하면 이 구절은 기기 목소리로
+      step();
+    });
+    audio.onended = g.end;
+    audio.onerror = g.fail;
     audio.play().catch(() => {});
   } else {
     step();
@@ -380,6 +423,7 @@ export function prev() {
 
 function stopAudioOnly() {
   gen++;
+  clearInterval(watch);
   clearTimeout(timer);
   if (audio) audio.pause();
   S.stop();
