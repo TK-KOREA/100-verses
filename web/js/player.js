@@ -7,11 +7,11 @@ import { load, save, isLearned } from './progress.js';
 import * as S from './speech.js';
 
 export const VOICES = [
-  { key: 'teacher', name: '주일학교 선생님', who: '다정한 여자 선생님' },
+  { key: 'teacher', name: '어린이 봉사자', who: '아이들을 섬기는 다정한 봉사자' },
   { key: 'sister', name: '다정한 언니', who: '밝은 고등학생 언니' },
   { key: 'dad', name: '든든한 아빠', who: '자기 전에 읽어 주는 아빠' },
   { key: 'clear', name: '또박또박 선생님', who: '또렷한 여자 선생님' },
-  { key: 'storyteller', name: '이야기 할아버지', who: '부드러운 할아버지' },
+  { key: 'mom', name: '따뜻한 엄마', who: '차분히 읽어 주는 엄마' },
   { key: 'device', name: '기기 목소리', who: '이 기기에 들어 있는 목소리' },
 ];
 const voiceName = (k) => (VOICES.find((x) => x.key === k) || VOICES[0]).name;
@@ -22,6 +22,7 @@ const GAPS = { short: { rep: 1, verse: 2 }, long: { rep: 2, verse: 4 } };
 
 export function prefs() {
   const p = { ...DEFAULTS, ...load('listen', {}) };
+  if (p.voice === 'storyteller') p.voice = 'mom'; // 이야기 할아버지는 2026-10-22에 따뜻한 엄마로 바뀌었다
   if (!VOICES.some((x) => x.key === p.voice)) p.voice = DEFAULTS.voice;
   return p;
 }

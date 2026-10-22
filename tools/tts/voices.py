@@ -16,8 +16,8 @@ COMMON_RULES = (
 
 VOICES = {
     "teacher": {
-        "name": "주일학교 선생님",
-        "who": "아이들 둘레에 앉아 읽어 주는 다정한 여자 선생님",
+        "name": "어린이 봉사자",
+        "who": "아이들 둘레에 앉아 읽어 주는 다정한 봉사자",
         "voice": "Sulafat",
         "style": "A warm Sunday school teacher reading a memory verse to a small circle of children sitting on the floor. A gentle smile in the voice, kind and encouraging.",
         "voice_desc": "Warm mid-range female voice, soft but clear, rounded consonants, no breathiness.",
@@ -55,14 +55,16 @@ VOICES = {
         "pace": "Deliberate and evenly spaced, every phrase given its own clear shape.",
         "tone": "Encouraging and focused, warm authority, never cold.",
     },
-    "storyteller": {
-        "name": "이야기 할아버지",
-        "who": "손주에게 들려주는 부드러운 할아버지",
-        "voice": "Algieba",
-        "style": "A gentle grandfather sharing a treasured verse with his grandchild, unhurried and full of quiet wonder.",
-        "voice_desc": "Smooth, soft male voice with a mellow, rounded warmth, clear and easy to follow.",
-        "scene": "A sunny porch on a quiet afternoon, the grandchild sitting close.",
-        "pace": "Slow and spacious, each phrase allowed to land before the next.",
-        "tone": "Tender, peaceful, gently wondering. Never sleepy or solemn.",
+
+    # 따뜻한 엄마: 2026-10-22 이야기 할아버지(Algieba) 대신
+    "mom": {
+        "name": "따뜻한 엄마",
+        "who": "아이 곁에서 차분히 읽어 주는 엄마",
+        "voice": "Vindemiatrix",
+        "style": "A loving mother reading a memory verse to her child at the kitchen table, gentle and patient, a soft smile in her voice.",
+        "voice_desc": "Warm, calm mid-range female voice, smooth and clear, tender but not breathy.",
+        "scene": "A quiet afternoon at home. The child sits close and repeats after her.",
+        "pace": "Calm and even, slightly slower than conversation, clear space between phrases.",
+        "tone": "Affectionate, reassuring, steady. Phrase endings settle warmly.",
     },
 }

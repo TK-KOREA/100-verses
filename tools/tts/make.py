@@ -128,8 +128,11 @@ def prompt_for(p: dict, transcript: str) -> str:
     )
 
 
+SYNTH_KEYS = ("voice", "style", "voice_desc", "scene", "pace", "tone")  # 소리에 닿는 것만(이름·설명은 바꿔도 다시 만들지 않는다)
+
+
 def design_hash(p: dict) -> str:
-    s = json.dumps([p, COMMON_RULES, BITRATE, GAP], ensure_ascii=False, sort_keys=True)
+    s = json.dumps([{k: p[k] for k in SYNTH_KEYS}, COMMON_RULES, BITRATE, GAP], ensure_ascii=False, sort_keys=True)
     return hashlib.sha1(s.encode()).hexdigest()[:10]
 
 
