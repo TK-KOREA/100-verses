@@ -60,7 +60,7 @@ export function entryFor(id, voice = prefs().voice) {
 
 /** 음원 길이가 글자 수에 견주어 말이 안 되면(모델이 오래 멈춘 음원) 쓰지 않고 기기 목소리로 읽는다. */
 function usable(e, v) {
-  if (!e || !v) return null;
+  if (!e || !v || e.off) return null; // off: 몇 번 만들어도 망가진 음원(기기 목소리로 읽는다)
   const n = v.text.replace(/[^0-9A-Za-z가-힣]/g, '').length;
   return e.dur > n * 0.6 + 6 ? null : e;
 }
