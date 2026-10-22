@@ -947,8 +947,15 @@ def build_batch(a, store: "Store", by_id: dict, all_ids: list, fixes: dict) -> N
     def submit(jobs):
         for n in range(0, len(jobs), BATCH_SIZE):
             part = jobs[n:n + BATCH_SIZE]
-            job = _client.batches.create(model=best, src=[request(k, i) for k, i in part],
-                                         config={"display_name": f"verse-tts-{time.strftime('%m%d-%H%M')}-{n // BATCH_SIZE}"})
+            try:
+                job = _client.batches.create(model=best, src=[request(k, i) for k, i in part],
+                                             config={"display_name": f"verse-tts-{time.strftime('%m%d-%H%M')}-{n // BATCH_SIZE}"})
+            except Exception as ex:  # noqa: BLE001
+                if "429" in str(ex) or "RESOURCE_EXHAUSTED" in str(ex):
+                    # 한꺼번에 둘 수 있는 작업 수를 넘었다. 보낸 것을 받은 뒤 다음 회차에 나머지를 보낸다.
+                    print(f"작업 한도에 닿아 {len(jobs) - n}개는 다음 회차에 보냅니다.", flush=True)
+                    return
+                raise
             pending[job.name] = [[k, i] for k, i in part]
             save_pending()
             print(f"작업 보냄 {job.name.split('/')[-1][:10]}… {len(part)}개", flush=True)
@@ -1010,7 +1017,7 @@ def build_batch(a, store: "Store", by_id: dict, all_ids: list, fixes: dict) -> N
 
     print(f"── {time.strftime('%Y-%m-%d %H:%M')} 시작 (Batch API, {best})", flush=True)
     collect()  # 지난번에 보내 두고 못 받은 작업부터
-    for rnd in range(3):  # 받아쓰기가 안 맞은 것은 두 번까지 다시
+    for rnd in range(8):  # 한도로 못 보낸 것, 받아쓰기가 안 맞은 것(두 번까지)을 이어 보낸다
         busy = {(k, i) for items in pending.values() for k, i in items}
         jobs = [(k, i) for i in ids for k in keys
                 if (k, i) not in busy and needs_synth(store.man(k)["verses"].get(str(i)), best)]
