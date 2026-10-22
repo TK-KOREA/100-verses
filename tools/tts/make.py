@@ -699,7 +699,7 @@ def status(store: Store, ids: list) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["all", "daily", "sample", "build", "resplit", "verify", "status", "chunks"],
+    ap.add_argument("cmd", choices=["batch", "all", "daily", "sample", "build", "resplit", "verify", "status", "chunks"],
                     help="all: 유료 키로 남은 것을 한 번에(다른 모델로 만든 것·확인 필요도 다시). "
                          "daily: 오늘 한도만큼 1번 구절부터 다섯 목소리를 같이 만든다")
     ap.add_argument("--workers", type=int, default=4, help="all: 동시에 만들 수")
@@ -732,6 +732,8 @@ def main() -> None:
     load_key()
     if a.cmd == "all":
         return build_all(a, store, by_id, all_ids, fixes)
+    if a.cmd == "batch":
+        return build_batch(a, store, by_id, all_ids, fixes)
     if a.cmd in ("sample", "verify", "daily") or (a.cmd == "resplit" and not a.voice):
         keys = a.voices.split(",") if a.voices else list(VOICES)
     elif a.voice in VOICES:
@@ -898,6 +900,138 @@ def build_all(a, store: "Store", by_id: dict, all_ids: list, fixes: dict) -> Non
         print(f"다음 한도는 {wake.strftime('%m-%d %H:%M')}(한국 시간)에 생겨요. 그때까지 기다립니다.", flush=True)
         while datetime.now(KST) < wake:
             time.sleep(60)
+
+
+BATCH_SIZE = 20  # 작업 하나에 넣는 요청 수(결과가 작업 안에 그대로 돌아온다)
+BATCH_FILE = HERE / "out/batches.json"  # 보낸 작업과 그 안의 (목소리, 구절). 끊겨도 결과를 이어 받는다.
+
+
+def needs_synth(e: dict | None, best: str) -> bool:
+    if not e or e.get("model") != best:
+        return True
+    return bool(e.get("check") or e.get("long")) and e.get("tries", 0) < 2
+
+
+def build_batch(a, store: "Store", by_id: dict, all_ids: list, fixes: dict) -> None:
+    """Batch API로 한 번에 만든다. 대화형 하루 한도(3.8 TTS 100번)와 따로 세고 값은 절반.
+    결과는 보통 몇 분 안에(길면 24시간) 온다. 받은 소리는 make_one과 똑같이 다듬고 받아쓰기로 맞춘다."""
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    from google.genai import types
+
+    best = MODELS[0]
+    keys = a.voices.split(",") if a.voices else list(VOICES)
+    ids = parse_ids(a.ids, all_ids)
+    for k in keys:
+        store.man(k)
+    synth_client()
+    lock = threading.Lock()
+    counts = {"made": 0, "check": 0, "fail": 0}
+    pending = json.loads(BATCH_FILE.read_text()) if BATCH_FILE.exists() else {}
+
+    def save_pending():
+        BATCH_FILE.parent.mkdir(parents=True, exist_ok=True)
+        BATCH_FILE.write_text(json.dumps(pending, ensure_ascii=False, indent=1))
+
+    def request(k, i):
+        p = VOICES[k]
+        v = by_id[i]
+        chunks = chunks_of(v["text"], fixes, i)
+        transcript = spoken_ref(v) + ". [long pause] " + " [short pause] ".join(chunks)
+        return {
+            "contents": [{"role": "user", "parts": [{"text": prompt_for(p, transcript)}]}],
+            "config": {"response_modalities": ["AUDIO"],
+                       "speech_config": {"voice_config": {"prebuilt_voice_config": {"voice_name": p["voice"]}}}},
+        }
+
+    def submit(jobs):
+        for n in range(0, len(jobs), BATCH_SIZE):
+            part = jobs[n:n + BATCH_SIZE]
+            job = _client.batches.create(model=best, src=[request(k, i) for k, i in part],
+                                         config={"display_name": f"verse-tts-{time.strftime('%m%d-%H%M')}-{n // BATCH_SIZE}"})
+            pending[job.name] = [[k, i] for k, i in part]
+            save_pending()
+            print(f"작업 보냄 {job.name.split('/')[-1][:10]}… {len(part)}개", flush=True)
+
+    def take(k, i, data):
+        """받은 소리 하나를 다듬어 저장한다."""
+        t0 = time.time()
+        if data[:4] == b"RIFF":
+            data = data[44:]
+        v = by_id[i]
+        p = VOICES[k]
+        chunks = chunks_of(v["text"], fixes, i)
+        ref = spoken_ref(v)
+        want = {"design": design_hash(p), "text": text_hash([ref, chunks])}
+        rp = raw_path(k, i)
+        rp.parent.mkdir(parents=True, exist_ok=True)
+        rp.write_bytes(data)
+        old = store.man(k)["verses"].get(str(i))
+        e = finish(data, ref, chunks, store.base / k / f"{i:03d}", best, want, True)
+        if old and old.get("model") == best and (old.get("check") or old.get("long")):
+            e["tries"] = old.get("tries", 0) + 1
+        with lock:
+            store.put(k, i, e)
+            counts["made"] += 1
+            counts["check"] += 1 if e.get("check") else 0
+            print(line(k, i, e, t0), flush=True)
+
+    def collect():
+        """보낸 작업이 다 끝날 때까지 기다리며, 끝난 작업의 결과를 처리한다."""
+        while pending:
+            for name in list(pending):
+                job = _client.batches.get(name=name)
+                state = str(job.state)
+                if not any(x in state for x in ("SUCCEEDED", "FAILED", "CANCELLED", "EXPIRED")):
+                    continue
+                items = pending[name]
+                if "SUCCEEDED" in state:
+                    resps = job.dest.inlined_responses or []
+                    work = []
+                    for (k, i), r in zip(items, resps):
+                        try:
+                            if r.error:
+                                raise RuntimeError(str(r.error))
+                            work.append((k, i, r.response.candidates[0].content.parts[0].inline_data.data))
+                        except Exception as ex:  # noqa: BLE001
+                            counts["fail"] += 1
+                            print(f"{k:12s} {i:3d} 실패: {str(ex)[:120]}", flush=True)
+                    with ThreadPoolExecutor(max_workers=a.workers) as ex:
+                        list(ex.map(lambda w: take(*w), work))
+                else:
+                    counts["fail"] += len(items)
+                    print(f"작업 {name.split('/')[-1][:10]}… {state}", flush=True)
+                del pending[name]
+                save_pending()
+                if a.publish:
+                    publish(store, all_ids)
+            if pending:
+                time.sleep(30)
+
+    print(f"── {time.strftime('%Y-%m-%d %H:%M')} 시작 (Batch API, {best})", flush=True)
+    collect()  # 지난번에 보내 두고 못 받은 작업부터
+    for rnd in range(3):  # 받아쓰기가 안 맞은 것은 두 번까지 다시
+        busy = {(k, i) for items in pending.values() for k, i in items}
+        jobs = [(k, i) for i in ids for k in keys
+                if (k, i) not in busy and needs_synth(store.man(k)["verses"].get(str(i)), best)]
+        if not jobs:
+            break
+        print(f"{rnd + 1}회차: {len(jobs)}개 보냄", flush=True)
+        submit(jobs)
+        collect()
+    # 3.8로 만들었지만 받아쓰기로 아직 못 맞춘 것
+    for k in keys:
+        for i in ids:
+            e = store.man(k)["verses"].get(str(i))
+            if e and e.get("model") == best and e.get("align") != "text":
+                e2 = resplit(by_id[i], k, store.base / k, fixes, e, True, only_aligned=True)
+                if e2 is not None:
+                    store.put(k, i, e2)
+                    print(line(k, i, e2, time.time()) + "  (다시 맞춤)", flush=True)
+    if a.publish:
+        publish(store, all_ids)
+    print(f"\n만든 것 {counts['made']}(확인 필요 {counts['check']}), 실패 {counts['fail']}", flush=True)
+    status(store, all_ids)
 
 
 KST = ZoneInfo("Asia/Seoul")
