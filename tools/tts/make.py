@@ -840,8 +840,13 @@ def build_all(a, store: "Store", by_id: dict, all_ids: list, fixes: dict) -> Non
         t0 = time.time()
         old = store.man(k)["verses"].get(str(i))
         try:
-            if not old or old.get("model") != best or old.get("check") or old.get("long"):
+            redo = old and old.get("model") == best and (old.get("check") or old.get("long"))
+            if redo and old.get("tries", 0) >= 2:
+                return  # 두 번 다시 만들어도 안 맞으면 사람이 듣고 정한다
+            if not old or old.get("model") != best or redo:
                 e = make_one(by_id[i], k, store.base / k, fixes, old, True, True)
+                if redo:
+                    e["tries"] = old.get("tries", 0) + 1
                 kind = "made"
             elif old.get("align") != "text":
                 e = resplit(by_id[i], k, store.base / k, fixes, old, True, only_aligned=True)
@@ -863,17 +868,36 @@ def build_all(a, store: "Store", by_id: dict, all_ids: list, fixes: dict) -> Non
             counts[kind] += 1
             print(line(k, i, e, t0) + ("  (다시 맞춤)" if kind == "aligned" else ""), flush=True)
 
-    for start in range(0, len(ids), 10):
-        batch = [(k, i) for i in ids[start:start + 10] for k in keys]
-        with ThreadPoolExecutor(max_workers=a.workers) as ex:
-            list(ex.map(lambda job: work(*job), batch))
-        if a.publish:
-            publish(store, all_ids)
-        if stop.is_set():
-            print("합성 한도를 다 썼어요(유료 등급인지, 크레딧이 남았는지 확인해 주세요).", flush=True)
-            break
-    print(f"\n이번에 만든 것 {counts['made']}, 다시 맞춘 것 {counts['aligned']}, 실패 {counts['fail']}", flush=True)
-    status(store, all_ids)
+    def left() -> bool:
+        for k in keys:
+            for i in ids:
+                e = store.man(k)["verses"].get(str(i))
+                if not e or e.get("model") != best or (e.get("check") and e.get("tries", 0) < 2) \
+                        or e.get("align") != "text":
+                    return True
+        return False
+
+    while True:
+        print(f"── {time.strftime('%Y-%m-%d %H:%M')} 시작", flush=True)
+        stop.clear()
+        _spent.clear()
+        for start in range(0, len(ids), 10):
+            batch = [(k, i) for i in ids[start:start + 10] for k in keys]
+            with ThreadPoolExecutor(max_workers=a.workers) as ex:
+                list(ex.map(lambda job: work(*job), batch))
+            if a.publish:
+                publish(store, all_ids)
+            if stop.is_set():
+                print("오늘 합성 한도를 다 썼어요(3.8 TTS는 유료 1단계도 하루 100번).", flush=True)
+                break
+        print(f"\n지금까지 만든 것 {counts['made']}, 다시 맞춘 것 {counts['aligned']}, 실패 {counts['fail']}", flush=True)
+        status(store, all_ids)
+        if not a.loop or not left():
+            return
+        wake = next_reset()
+        print(f"다음 한도는 {wake.strftime('%m-%d %H:%M')}(한국 시간)에 생겨요. 그때까지 기다립니다.", flush=True)
+        while datetime.now(KST) < wake:
+            time.sleep(60)
 
 
 KST = ZoneInfo("Asia/Seoul")
