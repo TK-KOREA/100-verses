@@ -699,8 +699,10 @@ def status(store: Store, ids: list) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["daily", "sample", "build", "resplit", "verify", "status", "chunks"],
-                    help="daily: 오늘 한도만큼 1번 구절부터 다섯 목소리를 같이 만든다")
+    ap.add_argument("cmd", choices=["all", "daily", "sample", "build", "resplit", "verify", "status", "chunks"],
+                    help="all: 유료 키로 남은 것을 한 번에(다른 모델로 만든 것·확인 필요도 다시). "
+                         "daily: 오늘 한도만큼 1번 구절부터 다섯 목소리를 같이 만든다")
+    ap.add_argument("--workers", type=int, default=4, help="all: 동시에 만들 수")
     ap.add_argument("--voice", help="build/resplit: 목소리 하나")
     ap.add_argument("--voices", help="sample/resplit: 쉼표로 여럿 (기본 전부)")
     ap.add_argument("--ids", help="예: 8 또는 1-10,15")
@@ -728,6 +730,8 @@ def main() -> None:
         return status(store, all_ids)
 
     load_key()
+    if a.cmd == "all":
+        return build_all(a, store, by_id, all_ids, fixes)
     if a.cmd in ("sample", "verify", "daily") or (a.cmd == "resplit" and not a.voice):
         keys = a.voices.split(",") if a.voices else list(VOICES)
     elif a.voice in VOICES:
@@ -813,6 +817,63 @@ def main() -> None:
         # 맥이 잠자는 동안에는 time.sleep이 멈출 수 있어 벽시계로 1분마다 본다.
         while datetime.now(KST) < wake:
             time.sleep(60)
+
+
+def build_all(a, store: "Store", by_id: dict, all_ids: list, fixes: dict) -> None:
+    """유료 키로 한 번에: 없는 것은 만들고, 맨 앞 모델(3.8)이 아닌 것·확인 필요·너무 긴 것은 다시 만들고,
+    받아쓰기로 맞추지 않은 것은 원본으로 다시 맞춘다. 10구절마다 운영에 반영한다."""
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    best = MODELS[0]
+    keys = a.voices.split(",") if a.voices else list(VOICES)
+    ids = parse_ids(a.ids, all_ids)
+    lock = threading.Lock()
+    stop = threading.Event()
+    counts = {"made": 0, "aligned": 0, "fail": 0}
+    for k in keys:
+        store.man(k)  # 여러 일꾼이 동시에 만들지 않게 미리 읽어 둔다
+
+    def work(k, i):
+        if stop.is_set():
+            return
+        t0 = time.time()
+        old = store.man(k)["verses"].get(str(i))
+        try:
+            if not old or old.get("model") != best or old.get("check") or old.get("long"):
+                e = make_one(by_id[i], k, store.base / k, fixes, old, True, True)
+                kind = "made"
+            elif old.get("align") != "text":
+                e = resplit(by_id[i], k, store.base / k, fixes, old, True, only_aligned=True)
+                kind = "aligned"
+                if e is None:
+                    return
+            else:
+                return
+        except QuotaDone:
+            stop.set()
+            return
+        except Exception as ex:  # noqa: BLE001
+            with lock:
+                counts["fail"] += 1
+                print(f"{k:12s} {i:3d} 실패: {str(ex)[:160]}", flush=True)
+            return
+        with lock:
+            store.put(k, i, e)
+            counts[kind] += 1
+            print(line(k, i, e, t0) + ("  (다시 맞춤)" if kind == "aligned" else ""), flush=True)
+
+    for start in range(0, len(ids), 10):
+        batch = [(k, i) for i in ids[start:start + 10] for k in keys]
+        with ThreadPoolExecutor(max_workers=a.workers) as ex:
+            list(ex.map(lambda job: work(*job), batch))
+        if a.publish:
+            publish(store, all_ids)
+        if stop.is_set():
+            print("합성 한도를 다 썼어요(유료 등급인지, 크레딧이 남았는지 확인해 주세요).", flush=True)
+            break
+    print(f"\n이번에 만든 것 {counts['made']}, 다시 맞춘 것 {counts['aligned']}, 실패 {counts['fail']}", flush=True)
+    status(store, all_ids)
 
 
 KST = ZoneInfo("Asia/Seoul")
