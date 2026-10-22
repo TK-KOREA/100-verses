@@ -387,17 +387,34 @@ def _mapper(blocks):
     return f
 
 
-def align_bounds(pcm: bytes, lead: float, tail: float, inner: list, units: list):
+def align_bounds(pcm: bytes, lead: float, tail: float, inner: list, units: list, got=None):
     """쉼마다 자른 조각을 받아쓰게 하고, 받아쓴 글을 본문과 글자 단위로 맞춰 덩어리 경계를 정한다.
     덩어리가 끝나는 글자 자리에 쉼이 있으면 그 쉼, 쉬지 않고 이어 읽었으면 조각 안을 글자 비율로 나눈다.
     반환: (경계 목록[(a,b)], 글이 맞는지, 정보) — 받아쓰기를 못 했으면 None."""
     inner = [r for r in inner if r[1] - r[0] >= PIECE_GAP]  # 짧은 쉼(어절 사이)은 조각을 나누지 않는다
     pieces = list(zip([lead] + [r[1] for r in inner], [r[0] for r in inner] + [tail]))
-    got = hear_pcm([pcm[int(s0 * RATE) * 2:int(s1 * RATE) * 2] for s0, s1 in pieces])
+    if got is None:
+        got = hear_pcm([pcm[int(s0 * RATE) * 2:int(s1 * RATE) * 2] for s0, s1 in pieces])
     if got is None or len(got) != len(pieces):
         return None
     T = [norm(g) for g in got]
     C = [norm(u) for u in units]
+    # 앞에 본문이 아닌 말이 붙었으면(모델이 연출 지시를 소리 내어 읽거나 인사말을 지어냄) 그 조각들을 버린다.
+    head = SequenceMatcher(None, "".join(T), "".join(C), autojunk=False)
+    first = next((b for b in head.get_matching_blocks() if b.size >= 4), None)
+    if first and first.b <= 2 and first.a > 6:
+        acc = 0
+        for q, t in enumerate(T):
+            if acc + len(t) > first.a:
+                break
+            acc += len(t)
+        if q > 0 and first.a - acc <= 3:
+            keep = [r for r in inner if r[0] >= pieces[q][0] - 0.01]
+            r = align_bounds(pcm, pieces[q][0], tail, keep, units, got[q:])
+            if r:
+                r[2]["lead"] = pieces[q][0]
+                r[2]["dropped"] = "".join(T[:q])[:60]
+            return r
     sm = SequenceMatcher(None, "".join(T), "".join(C), autojunk=False)
     f = _mapper(sm.get_matching_blocks())
     ends, acc = [], 0
@@ -454,6 +471,7 @@ def trim_and_time(pcm: bytes, units: list, ears: bool):
     got = align_bounds(pcm, lead, tail, inner, units) if ears else None
     if got:
         pick, ok, info = got
+        lead = info.get("lead", lead)  # 앞에 붙은 딴말을 버렸으면 거기서 시작
     else:
         pick, ok = pick_bounds(inner, lead, tail, [weight(u) for u in units])
         info = {"unheard": True}
@@ -577,7 +595,9 @@ def finish(pcm: bytes, ref: str, chunks: list, d: Path, model: str, want: dict, 
         e["heard"] = info["heard"]
         e["match"] = info["ratio"]
         if info["approx"]:
-            e["joined"] = info["approx"]  # 쉬지 않고 이어 읽어 글자 비율로 나눈 경계 수
+            e["joined"] = info["approx"]
+        if info.get("dropped"):
+            e["dropped"] = info["dropped"]  # 앞에서 잘라 낸 딴말(받아쓴 글 앞부분)  # 쉬지 않고 이어 읽어 글자 비율로 나눈 경계 수
     # 너무 긴 소리(모델이 오래 멈추거나 헛소리를 붙임): 글자당 0.45초, 적어도 20초를 넘으면 다시 만든다
     if tdur > max(20.0, len(norm("".join(chunks))) * 0.45):
         e["check"] = True
