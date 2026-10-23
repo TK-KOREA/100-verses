@@ -131,7 +131,12 @@ let lastPlayed = null; // 멈춘 뒤 "다시 듣기"에 쓴다 {verse, ctx}
 /** 지금 읽고 있는 덩어리 번호(본문 음원일 때만), 아니면 -1. */
 export function chunkNow() {
   if (!st || !st.entry || st.part !== 'text' || !audio) return -1;
-  const t = audio.currentTime;
+  let t = audio.currentTime;
+  if (st.prog) {
+    const seg = st.prog.segs[st.seg];
+    if (!seg || seg.part !== 'text') return -1;
+    t -= st.prog.off[st.seg] + PRIME;
+  }
   const ch = st.entry.chunks;
   for (let i = 0; i < ch.length; i++) if (t >= ch[i].s - 0.05 && t < (ch[i + 1] ? ch[i + 1].s - 0.05 : Infinity)) return i;
   return -1;
@@ -210,11 +215,13 @@ function unlockAudio() {
   S.unlock(); // 음원이 없는 구절은 기기 목소리로 읽으므로 같이 열어 둔다.
 }
 
-async function startVerse() {
+async function startVerse(rep = 1) {
   const my = ++gen;
   const v = byId[st.queue[st.qi]];
-  st.rep = 1;
+  st.rep = rep;
   st.part = null;
+  st.prog = null;
+  st.next = null;
   st.voice = prefs().voice;
   const m = await manifest(st.voice);
   if (my !== gen || !st) return;
@@ -223,15 +230,191 @@ async function startVerse() {
   st.pi = 0;
   mediaInfo(v);
   emit();
-  prefetchNext();
+  if (st.entry && audio) return startStream(my);
   step();
 }
 
-function prefetchNext() {
-  const nid = st.queue[st.qi + 1];
-  if (!nid || !entryFor(nid, st.voice)) return;
-  clip(clipPath(st.voice, nid, 'ref')).catch(() => {});
-  clip(clipPath(st.voice, nid, 'text')).catch(() => {});
+// ---------- 이어 붙여 틀기 ----------
+// 화면이 꺼지면 iOS는 곧 페이지의 JS를 멈춘다. 파일 하나하나를 JS로 바꿔 틀면 다음 파일로 못 넘어가
+// 멈춘다. 그래서 읽을 차례(주소·본문·쉼·반복·다음 구절)를 ADTS AAC 파일을 이어 붙인 소리 하나로
+// 만들어 튼다. ADTS는 이어 붙이기만 해도 한 소리가 된다. 처음엔 10분어치로 빨리 시작하고,
+// 화면이 켜져 있는 동안 40분어치를 더 만들어 다음 읽기의 시작(쉼 뒤)에서 갈아 끼운다.
+const PRIME = 2112 / 24000; // AAC 앞 지연: 이어 붙인 소리에서 각 파일의 말은 이만큼 뒤에서 시작한다
+const FIRST = 600; // 처음 만드는 길이(초)
+const MORE = 2400; // 이어 만드는 길이(초)
+const bufs = new Map(); // 받은 aac 파일(ArrayBuffer)
+const aacPathV = (voice, id, part) => `audio/${voice}/${pad3(id)}/${part}.aac?v=${entryFor(id, voice)?.v || ''}`;
+const gapAac = (sec) => `audio/gap-${sec}.aac`;
+
+function getBuf(path) {
+  if (bufs.size > 300) for (const k of [...bufs.keys()]) if (!k.includes('/gap-')) bufs.delete(k); // 너무 많으면 비운다(다시 받아도 SW에 있다)
+  if (!bufs.has(path)) {
+    const p = fetch(path).then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status)))));
+    p.catch(() => bufs.delete(path));
+    bufs.set(path, p);
+  }
+  return bufs.get(path);
+}
+
+/** ADTS 프레임을 세어 길이(초)를 낸다. 프레임 하나 = 1024 샘플. */
+function adtsDur(buf) {
+  const b = new Uint8Array(buf);
+  let i = 0;
+  let n = 0;
+  while (i + 7 <= b.length && b[i] === 0xff && (b[i + 1] & 0xf6) === 0xf0) {
+    const len = ((b[i + 3] & 3) << 11) | (b[i + 4] << 3) | (b[i + 5] >> 5);
+    if (!len) break;
+    i += len;
+    n++;
+  }
+  return (n * 1024) / 24000;
+}
+
+function gapSegs(sec, qi, rep) {
+  const out = [];
+  let left = sec;
+  for (const s2 of [4, 2, 1, 0.5]) while (left >= s2 - 0.01) { out.push({ qi, rep, part: 'gap', path: gapAac(s2), est: s2 }); left -= s2; }
+  return out;
+}
+
+/** fromQi 구절의 fromRep번째 읽기부터 limit초어치 차례를 짠다. 음원이 없는 구절에서 멈춘다. */
+function planFrom(fromQi, fromRep, limit) {
+  const p = prefs();
+  const g = GAPS[p.gap] || GAPS.short;
+  if (st.sleepEnd) limit = Math.min(limit, Math.max(1, (st.sleepEnd - Date.now()) / 1000));
+  const segs = [];
+  let est = 0;
+  let resume = null; // 이 차례가 끝난 뒤 이어 갈 자리 {qi, rep}
+  let done = false; // 차례 끝까지 다 짰다
+  outer: for (let qi = fromQi; ; qi++) {
+    if (qi >= st.queue.length) { done = true; break; }
+    const id = st.queue[qi];
+    const e = entryFor(id, st.voice);
+    if (!e) { resume = { qi, rep: 1 }; break; } // 이 구절은 기기 목소리로
+    if (qi > fromQi) { const gs = gapSegs(g.verse, qi - 1, 0); segs.push(...gs); est += g.verse; }
+    for (let rep = qi === fromQi ? fromRep : 1; ; rep++) {
+      if (rep > 1 && !(qi === fromQi && rep === fromRep)) { segs.push(...gapSegs(g.rep, qi, rep)); est += g.rep; }
+      segs.push({ qi, rep, part: 'start' }); // 읽기의 시작(갈아 끼울 수 있는 자리)
+      for (const part of readingParts()) {
+        if (part.startsWith('gap:')) { segs.push(...gapSegs(Number(part.slice(4)), qi, rep)); est += Number(part.slice(4)); }
+        else { segs.push({ qi, rep, part, path: aacPathV(st.voice, id, part) }); est += part === 'ref' ? e.refDur : e.dur; }
+      }
+      const last = p.times !== 0 && rep >= p.times;
+      if (est >= limit) { resume = last ? { qi: qi + 1, rep: 1 } : { qi, rep: rep + 1 }; break outer; }
+      if (last) break;
+    }
+  }
+  if (resume && resume.qi >= st.queue.length) { resume = null; done = true; }
+  return { segs, resume, done };
+}
+
+/** 짠 차례대로 파일을 받아 이어 붙인다. {segs, off[], url, total, resume, done} 또는 null */
+async function buildProg(fromQi, fromRep, limit) {
+  const plan = planFrom(fromQi, fromRep, limit);
+  const real = plan.segs.filter((x) => x.path);
+  if (!real.length) return null;
+  let parts;
+  try {
+    parts = await Promise.all(real.map((x) => getBuf(x.path)));
+  } catch (e) {
+    return null;
+  }
+  const off = [];
+  let t = 0;
+  let k = 0;
+  for (const seg of plan.segs) {
+    off.push(t);
+    if (seg.path) t += adtsDur(parts[k++]);
+  }
+  const url = URL.createObjectURL(new Blob(parts, { type: 'audio/aac' }));
+  return { ...plan, off, total: t, url };
+}
+
+async function startStream(my) {
+  const prog = await buildProg(st.qi, st.rep, FIRST);
+  if (my !== gen || !st) return prog && URL.revokeObjectURL(prog.url);
+  if (!prog) {
+    st.entry = null; // 받지 못했으면(인터넷 끊김 등) 이 구절은 기기 목소리로
+    return step();
+  }
+  playProg(prog);
+}
+
+function playProg(prog) {
+  const my = gen;
+  if (st.prog) URL.revokeObjectURL(st.prog.url);
+  st.prog = prog;
+  st.next = null;
+  st.seg = 0;
+  st.paused = false;
+  audio.onended = () => my === gen && st && progEnded();
+  audio.onerror = () => my === gen && st && progEnded();
+  audio.ontimeupdate = () => my === gen && st && progTick();
+  audio.src = prog.url;
+  audio.playbackRate = S.isSlow() ? SLOW_RATE : 1;
+  if ('preservesPitch' in audio) audio.preservesPitch = true;
+  audio.play().catch(() => {
+    if (my === gen && st) {
+      st.paused = true;
+      emit();
+    }
+  });
+  progTick();
+  if (!prog.done && prog.resume) setTimeout(() => my === gen && st && extend(), 1500);
+}
+
+/** 지금 자리에 맞춰 구절·몇 번째·부분을 고치고, 갈아 끼울 때가 되면 다음 차례로 바꾼다. */
+function progTick() {
+  const prog = st.prog;
+  const t = audio.currentTime;
+  let i = st.seg;
+  while (i + 1 < prog.segs.length && prog.off[i + 1] <= t) i++;
+  while (i > 0 && prog.off[i] > t) i--;
+  st.seg = i;
+  const seg = prog.segs[i];
+  if (st.next && st.next.at != null && t >= st.next.at - 0.02) return playProg(st.next.prog);
+  const part = seg.part === 'start' ? 'gap' : seg.part;
+  if (seg.qi !== st.qi || seg.rep !== st.rep || part !== st.part) {
+    const newVerse = seg.qi !== st.qi;
+    st.qi = seg.qi;
+    if (seg.rep) st.rep = seg.rep;
+    st.part = part;
+    if (newVerse) {
+      st.entry = entryFor(st.queue[st.qi], st.voice);
+      mediaInfo(byId[st.queue[st.qi]]);
+    }
+    emit();
+  }
+  if (!st.next && !prog.done && prog.resume && prog.total - t < 300) extend();
+}
+
+/** 다음 차례를 미리 만든다. 지금 차례 안에 있는 다음 읽기의 시작에서 갈아 끼운다(그 앞은 쉼이라 티가 안 난다). */
+async function extend() {
+  if (st.next) return;
+  const prog = st.prog;
+  const my = gen;
+  // 지금 자리 다음의 읽기 시작들 가운데 30초 넘게 남은 첫 자리(만드는 동안 지나가지 않게)
+  const t = audio.currentTime;
+  let k = -1;
+  for (let i = st.seg + 1; i < prog.segs.length; i++) {
+    if (prog.segs[i].part === 'start' && prog.off[i] - t > 30) { k = i; break; }
+  }
+  const from = k >= 0 ? { qi: prog.segs[k].qi, rep: prog.segs[k].rep } : prog.resume;
+  if (!from) return;
+  st.next = { at: null, prog: null };
+  const next = await buildProg(from.qi, from.rep, MORE);
+  if (my !== gen || !st || st.prog !== prog) return next && URL.revokeObjectURL(next.url);
+  if (!next) { st.next = null; return; }
+  st.next = { at: k >= 0 ? prog.off[k] - 0.3 : null, prog: next }; // 쉼 끝자락에서(말이 잘리지 않게)
+}
+
+function progEnded() {
+  const prog = st.prog;
+  if (st.next && st.next.prog) return playProg(st.next.prog);
+  if (prog.done || sleepDue()) return finish();
+  // 다음 구절에 음원이 없거나, 화면이 꺼져 있는 동안 미리 만들지 못했다: 거기서부터 다시
+  st.qi = prog.resume.qi;
+  startVerse(prog.resume.rep);
 }
 
 function step() {
@@ -358,8 +541,11 @@ function stopNow() {
   if (audio) {
     audio.onended = null;
     audio.onerror = null;
+    audio.ontimeupdate = null;
     audio.pause();
   }
+  if (st?.prog) URL.revokeObjectURL(st.prog.url);
+  if (st?.next?.prog) URL.revokeObjectURL(st.next.prog.url);
   S.stop();
   st = null;
   if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'none';
@@ -374,6 +560,12 @@ export function stop() {
 export function pause() {
   if (!st || st.paused) return;
   st.paused = true;
+  if (st.prog) {
+    // 이어 붙인 소리는 그 자리에서 멈췄다가 그 자리에서 이어 간다(끝 알림과 타이머는 그대로 둔다)
+    audio.pause();
+    if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
+    return emit();
+  }
   gen++; // 쉼 타이머와 기기 목소리 끝 알림을 버린다
   clearTimeout(timer);
   if (audio) audio.pause();
@@ -386,6 +578,11 @@ export function pause() {
 export function resume() {
   if (!st || !st.paused) return;
   st.paused = false;
+  if (st.prog) {
+    audio.play().catch(() => {});
+    if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
+    return emit();
+  }
   gen++;
   if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
   emit();
@@ -426,7 +623,12 @@ function stopAudioOnly() {
   gen++;
   clearInterval(watch);
   clearTimeout(timer);
-  if (audio) audio.pause();
+  if (audio) {
+    audio.ontimeupdate = null;
+    audio.pause();
+  }
+  if (st?.next?.prog) URL.revokeObjectURL(st.next.prog.url);
+  if (st) st.next = null;
   S.stop();
 }
 
@@ -434,6 +636,17 @@ function stopAudioOnly() {
 export function setPref(key, value) {
   save('listen', { ...load('listen', {}), [key]: value });
   if (key === 'voice') manifest(value);
+  if (st && st.prog) {
+    // 이어 붙인 소리는 미리 짜 둔 차례라, 바꾸면 지금 구절 처음부터 새로 짠다
+    if (key === 'next' || key === 'order') st.queue = [st.queue[st.qi], ...buildQueue(st.queue[st.qi], st.ctx).slice(1)];
+    if (key === 'next' || key === 'order') st.qi = 0;
+    if (key === 'sleep') st.sleepEnd = value ? Date.now() + value * 60000 : 0;
+    if (key === 'voice' && value === 'device') S.unlock();
+    stopAudioOnly();
+    st.paused = false;
+    startVerse();
+    return;
+  }
   if (st) {
     if (key === 'next' || key === 'order') {
       const cur = st.queue[st.qi];
@@ -454,7 +667,8 @@ export function setPref(key, value) {
 
 export function setSlow(v) {
   S.setSlow(v);
-  if (st && audio && st.part && !st.part.startsWith('gap:') && st.entry) audio.playbackRate = v ? SLOW_RATE : 1;
+  if (st && audio && st.prog) audio.playbackRate = v ? SLOW_RATE : 1;
+  else if (st && audio && st.part && !st.part.startsWith('gap:') && st.entry) audio.playbackRate = v ? SLOW_RATE : 1;
   emit();
 }
 
@@ -513,4 +727,11 @@ if (typeof navigator !== 'undefined' && 'mediaSession' in navigator) {
   set('stop', () => stop());
   set('nexttrack', () => next());
   set('previoustrack', () => prev());
+}
+
+// 화면이 다시 켜지면 지금 자리에 맞춰 화면을 고친다(꺼져 있는 동안은 timeupdate가 오지 않을 수 있다).
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && st && st.prog) progTick();
+  });
 }

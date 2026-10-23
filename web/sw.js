@@ -1,7 +1,7 @@
 // 오프라인 저장. 처음 열 때 모든 파일과 구절 데이터를 저장하고, 다음부터는 저장한 것을 먼저 보여 준 뒤
 // 뒤에서 새 파일을 받아 둔다(다음에 열 때 반영). 파일을 바꾸면 VERSION을 올린다.
-const VERSION = 'v100-2026-10-22-2';
-// 들어 보기 음원(web/audio/**/*.m4a)은 크고 잘 안 바뀌어서 VERSION과 따로 둔다. 한 번 받은 것은 계속 쓴다.
+const VERSION = 'v100-2026-10-23-1';
+// 들어 보기 음원(web/audio/**/*.m4a, *.aac)은 크고 잘 안 바뀌어서 VERSION과 따로 둔다. 한 번 받은 것은 계속 쓴다.
 // 음원을 다시 만들면(같은 주소에 새 소리) AUDIO 이름을 올린다.
 const AUDIO = 'audio-1';
 const ROOT = new URL('./', self.location).pathname; // 앱이 놓인 경로(/100-verses/)
@@ -30,6 +30,10 @@ const FILES = [
   'audio/gap-1.m4a',
   'audio/gap-2.m4a',
   'audio/gap-4.m4a',
+  'audio/gap-0.5.aac',
+  'audio/gap-1.aac',
+  'audio/gap-2.aac',
+  'audio/gap-4.aac',
 ];
 
 self.addEventListener('install', (e) => {
@@ -57,7 +61,7 @@ self.addEventListener('fetch', (e) => {
   // 앱 화면이 아닌 페이지(알림 0단계 시험 앱 push0/ 등)는 앱 화면으로 바꾸지 않고 그대로 받는다.
   if (req.mode === 'navigate' && url.pathname !== ROOT && url.pathname !== ROOT + 'index.html') return;
   if (url.pathname.startsWith(ROOT + 'push0/')) return;
-  if (url.pathname.startsWith(ROOT + 'audio/') && url.pathname.endsWith('.m4a')) {
+  if (url.pathname.startsWith(ROOT + 'audio/') && /\.(m4a|aac)$/.test(url.pathname)) {
     e.respondWith(audio(req, url));
     return;
   }
@@ -111,7 +115,7 @@ async function audio(req, url) {
   return new Response(buf.slice(start, end + 1), {
     status: 206,
     headers: {
-      'Content-Type': 'audio/mp4',
+      'Content-Type': url.pathname.endsWith('.aac') ? 'audio/aac' : 'audio/mp4',
       'Content-Range': `bytes ${start}-${end}/${size}`,
       'Content-Length': String(end - start + 1),
       'Accept-Ranges': 'bytes',

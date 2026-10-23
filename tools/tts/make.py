@@ -541,6 +541,11 @@ def to_m4a(pcm: bytes, path: Path) -> None:
         raise RuntimeError("ffmpeg: " + p.stderr.decode(errors="replace")[-300:])
     os.chmod(tmp, 0o644)
     os.replace(tmp, path)
+    # 앱은 ADTS(.aac)를 이어 붙여 튼다(화면이 꺼져도 끊기지 않게). 같은 소리를 다시 담기만 한다.
+    aac = path.with_suffix(".aac")
+    subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(path), "-c:a", "copy",
+                    "-f", "adts", str(aac)], check=True)
+    os.chmod(aac, 0o644)
     return hashlib.sha1(path.read_bytes()).hexdigest()[:8]
 
 # ---------- 만들기 ----------
